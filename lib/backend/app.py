@@ -668,5 +668,28 @@ def get_product_details(product_name):
 
     return Response(generate(), mimetype='text/event-stream')
 
+@app.route('/api/site-items', methods=['GET'])
+def get_site_items():
+    prompt = request.args.get('prompt', default='', type=str)
+    limit = request.args.get('limit', default=12, type=int)
+
+    def generate():
+        try:
+            # For now, just generate generic items
+            for i in range(limit):
+                item = {
+                    'title': f'Item {i+1}',
+                    'description': f'Description for Item {i+1}',
+                    'icon': 'cube'  # Default icon
+                }
+                yield f"data: {json.dumps(item)}\n\n"
+
+            yield f"data: {json.dumps({'type': 'stop'})}\n\n"
+        except Exception as e:
+            print(f"Error generating site items: {str(e)}")
+            yield f"data: {json.dumps({'error': 'Failed to generate site items'})}\n\n"
+
+    return Response(generate(), mimetype='text/event-stream')
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=os.environ.get('DEBUG', False))

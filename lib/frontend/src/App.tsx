@@ -33,26 +33,61 @@ const useConfig = () => {
   return { config, loading, error };
 };
 
+interface Site {
+  name: string;
+  route: string;
+  prompt: string;
+}
+
 const App: React.FC = () => {
   const { config, loading, error } = useConfig();
-  const [sites, setSites] = useState<{ name: string; route: string }[]>([]);
+  const [sites, setSites] = useState<Site[]>(() => {
+    const savedSites = localStorage.getItem('sites');
+    return savedSites ? JSON.parse(savedSites) : [];
+  });
   const [isAddingSite, setIsAddingSite] = useState(false);
   const [newSiteName, setNewSiteName] = useState('');
   const navigate = useNavigate();
 
-  document.title = `${config?.customerName} AI Assistant`;
+  useEffect(() => {
+    localStorage.setItem('sites', JSON.stringify(sites));
+  }, [sites]);
+
+  useEffect(() => {
+    const savedSites = localStorage.getItem('sites');
+    if (savedSites) {
+      setSites(JSON.parse(savedSites));
+    }
+  }, []);
+
   if (loading) return <div>Loading...</div>;
   if (error) return <div>Error loading config: {error.message}</div>;
   if (!config) return <div>Config not available</div>;
 
+  document.title = `${config.customerName} AI Assistant`;
+
   const handleAddSite = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Enter' && newSiteName.trim()) {
       const newRoute = `/site/${newSiteName.toLowerCase().replace(/\s+/g, '-')}`;
-      setSites([...sites, { name: newSiteName.trim(), route: newRoute }]);
+      setSites(prevSites => {
+        const updatedSites = [...prevSites, { name: newSiteName.trim(), route: newRoute, prompt: '' }];
+        localStorage.setItem('sites', JSON.stringify(updatedSites));
+        return updatedSites;
+      });
       setNewSiteName('');
       setIsAddingSite(false);
       navigate(newRoute);
     }
+  };
+
+  const handlePromptSave = (route: string, prompt: string) => {
+    setSites(prevSites => {
+      const updatedSites = prevSites.map(site => 
+        site.route === route ? { ...site, prompt } : site
+      );
+      localStorage.setItem('sites', JSON.stringify(updatedSites));
+      return updatedSites;
+    });
   };
 
   return (
@@ -122,8 +157,19 @@ const App: React.FC = () => {
           <Route path="/" element={<ChatBot backendUrl={config.backendUrl} customerName={config.customerName} />} />
           <Route path="/products" element={<ProductGrid backendUrl={config.backendUrl} />} />
           <Route path="/product/:productName" element={<ProductDetails backendUrl={config.backendUrl} />} />
-          {sites.map((site, index) => (
-            <Route key={index} path={site.route} element={<SiteInfo siteName={site.name} />} />
+          {sites.map((site) => (
+            <Route 
+              key={site.route} 
+              path={site.route} 
+              element={
+                <SiteInfo 
+                  siteName={site.name} 
+                  initialPrompt={site.prompt} 
+                  onPromptSave={(prompt) => handlePromptSave(site.route, prompt)}
+                  backendUrl={config.backendUrl}
+                />
+              } 
+            />
           ))}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
