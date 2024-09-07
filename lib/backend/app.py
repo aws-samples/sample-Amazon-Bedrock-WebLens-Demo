@@ -31,6 +31,7 @@ DYNAMODB_CLIENT = boto3.client('dynamodb', region_name=aws_region)
 
 # Get the DynamoDB table name from environment variable
 PRODUCT_TABLE_NAME = os.environ.get('PRODUCT_TABLE_NAME', f"{customer_name}-kb-products")
+SITE_INFO_TABLE_NAME = os.environ.get('SITE_INFO_TABLE_NAME', f"{customer_name}-kb-info")
 
 # Retriever setup
 retriever = AmazonKnowledgeBasesRetriever(
@@ -41,7 +42,7 @@ retriever = AmazonKnowledgeBasesRetriever(
 # Products retriever setup
 products_retriever = AmazonKnowledgeBasesRetriever(
     knowledge_base_id=knowledge_base_id,
-    retrieval_config={"vectorSearchConfiguration": {"numberOfResults": 10}},
+    retrieval_config={"vectorSearchConfiguration": {"numberOfResults": 15}},
 )
 
 system_prompt = """
@@ -493,7 +494,6 @@ def generate_products(limit):
                 {{
                     "name": "Specific product or service name",
                     "description": "A brief, clear description of the product or service",
-                    "link": "URL to the product or service page if available, otherwise null",
                     "icon": "An appropriate Font Awesome icon name (without the 'fa-' prefix) that represents this product or service"
                 }}
             ]
@@ -561,6 +561,7 @@ def generate_products(limit):
 
     # Store the generated products in DynamoDB
     for product in products:
+        print(f"Storing product in DynamoDB: {product} in {PRODUCT_TABLE_NAME}")
         try:
             DYNAMODB_CLIENT.put_item(
                 TableName=PRODUCT_TABLE_NAME,
@@ -670,26 +671,146 @@ def get_product_details(product_name):
 
 @app.route('/api/site-items', methods=['GET'])
 def get_site_items():
-    prompt = request.args.get('prompt', default='', type=str)
+    prompt = request.args.get('prompt', type=str)
+    item_type = request.args.get('item_type', default='', type=str)
     limit = request.args.get('limit', default=12, type=int)
+    if not prompt or not item_type:
+        return jsonify({'error': 'Both prompt and item_type are required'}), 400
 
     def generate():
         try:
-            # For now, just generate generic items
-            for i in range(limit):
-                item = {
-                    'title': f'Item {i+1}',
-                    'description': f'Description for Item {i+1}',
-                    'icon': 'cube'  # Default icon
-                }
-                yield f"data: {json.dumps(item)}\n\n"
+            print(f"Searching for existing items in DynamoDB for prompt: {prompt}, item_type: {item_type}")
+            # Try to get items from DynamoDB
+            response = DYNAMODB_CLIENT.query(
+                TableName=SITE_INFO_TABLE_NAME,
+                KeyConditionExpression='item_type = :item_type',
+                ExpressionAttributeValues={
+                    ':item_type': {'S': item_type}
+                },
+                Limit=limit
+            )
+            items = response.get('Items', [])
+            print(f"Found {len(items)} items in DynamoDB")
+
+            if items:
+                for item in items:
+                    item_dict = {
+                        'title': item['title']['S'],
+                        'description': item['description']['S'],
+                        'icon': item['icon']['S']
+                    }
+                    yield f"data: {json.dumps(item_dict)}\n\n"
+            else:
+                # If no items in DynamoDB, generate them based on the prompt
+                print(f"No items found in DynamoDB, generating new items")
+                generated_items = generate_site_items(prompt, item_type, limit)
+                for item in generated_items:
+                    yield f"data: {json.dumps(item)}\n\n"
 
             yield f"data: {json.dumps({'type': 'stop'})}\n\n"
         except Exception as e:
-            print(f"Error generating site items: {str(e)}")
-            yield f"data: {json.dumps({'error': 'Failed to generate site items'})}\n\n"
+            print(f"Error retrieving or generating site items: {str(e)}")
+            yield f"data: {json.dumps({'error': 'Failed to retrieve or generate site items'})}\n\n"
 
     return Response(generate(), mimetype='text/event-stream')
+
+def generate_site_items(prompt, item_type, limit):
+    print(f"Generating items for prompt: {prompt}, item_type: {item_type}")
+
+    generated_items = []
+    processed_titles = set()  # To keep track of processed item titles
+
+    docs = products_retriever.get_relevant_documents(f"{customer_name} {prompt}")
+    
+    for doc in docs:
+        if len(generated_items) >= limit:
+            break  # Stop processing if we've reached the limit
+
+        context = doc.metadata['location']['webLocation']['url'] + "\n\n" + doc.page_content
+
+        extraction_prompt = f"""
+        Based on the following information below about {customer_name} and the classifier: "{prompt}", extract relevant items.
+        
+        <context>
+        {context}
+        </context>
+
+        <instructions>
+           For each item, provide:
+        1. A title - The name, title, or key feature of the item
+        2. A brief description of the product as it relates to {customer_name} and {prompt}
+        3. An appropriate Font Awesome icon name (without the 'fa-' prefix)
+
+        Use a consistent naming convention for all the titles. 
+
+        Return the result as a JSON array of objects with the following structure:
+        [
+            {{
+                "title": "Item title",
+                "description": "Brief description of the item",
+                "icon": "font-awesome-icon-name"
+            }}
+        ]
+        If no clear items are identified, return an empty array.
+
+        Don't repeat items. If items sound similar, combine them into a single item.
+
+        Think through what's being asked for in the prompt classifier: "{prompt}" and only extract the items that are relevant to the prompt.
+
+        Context:
+        """
+
+        try:
+            extraction_response = BEDROCK_CLIENT.converse(
+                modelId="anthropic.claude-3-sonnet-20240229-v1:0",
+                system=[{"text": system_prompt}],
+                messages=[{"role": "user", "content": [{"text": extraction_prompt}]}],
+                inferenceConfig={"maxTokens": 1000, "temperature": 0.5, "topP": 1},
+            )
+            response_content = extraction_response["output"]["message"]["content"][0]["text"]
+
+            print(f"Extraction response: {response_content}")
+            
+            # Use regex to find the JSON array in the response
+            json_match = re.search(r'\[.*?\]', response_content, re.DOTALL)
+            if json_match:
+                json_str = json_match.group()
+                extracted_items = json.loads(json_str)
+            else:
+                print(f"No JSON array found in the response for document: {doc.metadata['location']['webLocation']['url']}")
+                continue
+            
+            for item in extracted_items:
+                metadata_link = doc.metadata.get('location', {}).get('webLocation', {}).get('url')
+                # print(f"Extracted item: {json.dumps(item, indent=2)}")
+                if len(generated_items) >= limit:
+                    break  # Stop processing if we've reached the limit
+
+                if item.get("title") and item["title"] not in processed_titles:
+                    processed_titles.add(item["title"])
+                    generated_items.append(item)
+                    # print(f"Generated item: {json.dumps(item, indent=2)}")
+
+                    # Store the item in DynamoDB
+                    try:
+                        DYNAMODB_CLIENT.put_item(
+                            TableName=SITE_INFO_TABLE_NAME,
+                            Item={
+                                'item_type': {'S': item_type},
+                                'title': {'S': item['title']},
+                                'description': {'S': item['description']},
+                                'icon': {'S': item.get('icon', 'cube')},
+                                'link': {'S': metadata_link}
+                            }
+                        )
+                    except Exception as e:
+                        print(f"Error storing item in DynamoDB: {str(e)}")
+
+        except Exception as e:
+            print(f"Error extracting items from document: {str(e)}")
+
+    print(f"Total items generated: {len(generated_items)}")
+    return generated_items
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=os.environ.get('DEBUG', False))

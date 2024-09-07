@@ -252,6 +252,7 @@ export class KBStack extends cdk.Stack {
         // Create Ingestion Job Lambda
         const ingestionJobLambda = new lambda.Function(this, 'IngestionJobLambda', {
             runtime: lambda.Runtime.PYTHON_3_9,
+            timeout: cdk.Duration.seconds(300),
             handler: 'index.lambda_handler',
             code: lambda.Code.fromAsset(path.join(__dirname, 'start-ingestion-job')),
             role: ingestionJobLambdaRole,

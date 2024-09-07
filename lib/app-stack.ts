@@ -1,4 +1,5 @@
 import { Construct } from 'constructs';
+import { Platform } from 'aws-cdk-lib/aws-ecr-assets';
 import * as cdk from 'aws-cdk-lib';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as ecs from 'aws-cdk-lib/aws-ecs';
@@ -43,7 +44,9 @@ export class AppStack extends cdk.Stack {
       desiredCount: 1,
       taskImageOptions: {
         containerPort: 5000,
-        image: ecs.ContainerImage.fromAsset('lib/backend'),
+        image: ecs.ContainerImage.fromAsset('lib/backend', {
+          platform: Platform.LINUX_ARM64
+        }),
         environment: {
           AWS_REGION: this.region,
           CUSTOMER_NAME: props.customerName,
@@ -138,13 +141,27 @@ export class AppStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.DESTROY, // Use with caution in production
     });
 
-    // Grant read/write permissions to the backend task
-    productTable.grantReadWriteData(taskRole);
+    // Create DynamoDB table for kb-info (site info)
+    const siteInfoTable = new dynamodb.Table(this, 'KbInfoTable', {
+      tableName: `${props.customerName}-kb-info`,
+      partitionKey: { name: 'item_type', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'title', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: cdk.RemovalPolicy.DESTROY, // Use with caution in production
+    });
 
-    // Add the table name to the backend service environment variables
+    // Grant read/write permissions to the backend task for both tables
+    productTable.grantReadWriteData(taskRole);
+    siteInfoTable.grantReadWriteData(taskRole);
+
+    // Add the table names to the backend service environment variables
     backendService.taskDefinition.defaultContainer?.addEnvironment(
       'PRODUCT_TABLE_NAME',
       productTable.tableName
+    );
+    backendService.taskDefinition.defaultContainer?.addEnvironment(
+      'SITE_INFO_TABLE_NAME',
+      siteInfoTable.tableName
     );
   }
 }

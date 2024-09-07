@@ -5,6 +5,10 @@ import sys
 import json
 import os
 import shutil
+import threading
+
+def npm_install():
+    subprocess.run(["npm", "install"], check=True)
 
 def check_cdk_cli():
     if shutil.which('cdk') is None:
@@ -170,16 +174,66 @@ def load_context():
     with open('cdk.context.json', 'r') as f:
         return json.load(f)
 
+def run_local():
+    # Check if python or python3 is on the path and set python_command
+    python_command = None
+    for cmd in ['python', 'python3']:
+        try:
+            subprocess.run([cmd, '--version'], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            python_command = cmd
+            break
+        except subprocess.CalledProcessError:
+            continue
+        except FileNotFoundError:
+            continue
+
+    if python_command is None:
+        print("Error: Neither 'python' nor 'python3' found on the system path.")
+        sys.exit(1)
+
+    print(f"Using Python command: {python_command}")
+    def run_frontend():
+        frontend_dir = os.path.join("lib", "frontend")
+        if not os.path.exists(frontend_dir):
+            print(f"Frontend directory not found: {frontend_dir}")
+            return
+        os.chdir(frontend_dir)
+        process = subprocess.Popen("npm run start", shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        stream_output(process, "Frontend")
+
+    def run_backend():
+        backend_dir = os.path.dirname(os.path.abspath(__file__))
+        os.chdir(backend_dir)
+        process = subprocess.Popen(f"{python_command} start.py", shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        stream_output(process, "Backend")
+
+    print("Starting local development environment...")
+    frontend_thread = threading.Thread(target=run_frontend)
+    backend_thread = threading.Thread(target=run_backend)
+
+    frontend_thread.start()
+    backend_thread.start()
+
+    try:
+        frontend_thread.join()
+        backend_thread.join()
+    except KeyboardInterrupt:
+        print("\nStopping local development environment...")
+
 def main():
     check_cdk_cli()
     check_docker()
 
     parser = argparse.ArgumentParser(description="CDK Deployment Script")
-    parser.add_argument("command", choices=["deploy", "destroy", "synth", "list", "create"], help="Command to execute")
+    parser.add_argument("command", choices=["deploy", "destroy", "synth", "list", "create", "local"], help="Command to execute")
     parser.add_argument("stack", nargs="?", choices=["app", "kb"], help="Stack to operate on (optional)")
     parser.add_argument("--customer", help="Customer name")
 
     args = parser.parse_args()
+
+    if args.command == "local":
+        run_local()
+        return
 
     if args.command == "list":
         list_customers()
@@ -194,6 +248,7 @@ def main():
 
     check_context_file(args.customer)
     load_customer_context(args.customer)
+    npm_install()
 
     if args.command == "deploy":
         deploy(args.stack)

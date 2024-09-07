@@ -93,8 +93,6 @@ Then run `cdk deploy --all` to deploy the project to your environment.
         "https://www.example.com/"
     ],
     "customerName": "ACME Corp",
-    "customerFavicon": "optional favicon link",
-    "customerLogo": "http://acmecorp.com/logo.jpg",
     "customerIndustry": "Trucking"
 
 }
@@ -103,41 +101,35 @@ The `scrapeUrls` array contains the URLs that will be scraped and indexed into K
 
 `customerName` This is the name of the customer that will be displayed in the header of the Streamlit Chat UI.
 
-`customerFavicon` Optional - The favicon that will be displayed in the header of the Streamlit Chat UI.
-
-`customerLogo` The logo that will be displayed next to generated responses.
-
 `customerIndustry` The industry that the customer is in. Used for synthetic data generation
 
 ## Stack Description
-### KendraStack
-This stack creates a Kendra index. It also creates a Kendra datasource for the index and initiates a sync job to populate the datasource with the scraped URLs.
 
-### KbStreamlitAppStack
-This stack creates a Streamlit ChatBot app that interacts with the Kendra Index. 
+### KBStack (br-kb-stack.ts)
+This stack creates:
+- An OpenSearch Serverless collection
+- A Bedrock Knowledge Base
+- A data source for the Knowledge Base
+- An ingestion job to populate the Knowledge Base
+
+### AppStack (app-stack.ts)
+This stack creates:
+- A VPC and ECS cluster for the backend service
+- An Application Load Balanced Fargate Service for the backend
+- An S3 bucket for the frontend static files
+- A CloudFront distribution for content delivery
+- DynamoDB tables for products and site info
 
 ## Local Development
-To deploy the Streamlit app locally, cd to `/lib/streamlit-docker`. You must define the following environment variables:
+The components in the AppStack (React frontend and Python Flask backend) can be run locally using Docker. You will still need to deploy the KBStack to provide a knowledge base for the backend to query.
+
+To run the AppStack locally:
+
+1. Add a `.env.local` file to the `/backend` directory with the following:
 ```
-KENDRA_INDEX_ID
-CUSTOMER_NAME
-LOGO_URL
-FAVICON_URL
-AWS_REGION
+AWS_REGION=
+CUSTOMER_NAME=
+KNOWLEDGE_BASE_ID=
 ```
-Then run `streamlit run main.py` to start the app.
 
-## Scraping
-The project uses the V1 verson of the Kendra web-scraper to crawl the customer's URLs. This works in most cases, but there are some situations where the scraper is blocked from some reason. In this case, you can use the provided scraper to crawl the customer's website and upload the results to Kendra.
-
-The scraper uses a Python library called [Scrapy](https://scrapy.org/).
-
-To use the scraper, cd to `/scraper` and run 
-
-`pip install -r requirements.txt` 
-
-to install the dependencies. Export the Kendra Index Id from your Kendra stack to the `KENDRA_INDEX_ID` environment variable. 
-
-Then run 
-
-`crapy crawl defaultspider`
+Then run `./start.py local` to start the frontend and backend locally. 

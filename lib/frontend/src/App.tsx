@@ -70,6 +70,11 @@ const App: React.FC = () => {
     if (event.key === 'Enter' && newSiteName.trim()) {
       const newRoute = `/site/${newSiteName.toLowerCase().replace(/\s+/g, '-')}`;
       setSites(prevSites => {
+        // Check if a site with this name already exists
+        if (prevSites.some(site => site.name.toLowerCase() === newSiteName.trim().toLowerCase())) {
+          alert('A tab with this name already exists. Please choose a unique name.');
+          return prevSites;
+        }
         const updatedSites = [...prevSites, { name: newSiteName.trim(), route: newRoute, prompt: '' }];
         localStorage.setItem('sites', JSON.stringify(updatedSites));
         return updatedSites;
@@ -115,8 +120,8 @@ const App: React.FC = () => {
           <Button color="inherit" component={RouterLink} to="/products" sx={{ marginRight: 1 }}>
             Products
           </Button>
-          {sites.map((site, index) => (
-            <Button key={index} color="inherit" component={RouterLink} to={site.route}>
+          {sites.map((site) => (
+            <Button key={site.name} color="inherit" component={RouterLink} to={site.route}>
               {site.name}
             </Button>
           ))}
@@ -159,7 +164,7 @@ const App: React.FC = () => {
           <Route path="/product/:productName" element={<ProductDetails backendUrl={config.backendUrl} />} />
           {sites.map((site) => (
             <Route 
-              key={site.route} 
+              key={site.name} 
               path={site.route} 
               element={
                 <SiteInfo 

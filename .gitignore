@@ -17,3 +17,4 @@ cdk.context.json
 .env.local
 /lib/frontend/build
 customers/
+lib/frontend/public/config.json
