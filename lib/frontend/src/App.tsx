@@ -96,6 +96,14 @@ const App: React.FC = () => {
     });
   };
 
+  const handleTabDelete = (tabName: string) => {
+    setSites(prevSites => {
+      const updatedSites = prevSites.filter(site => site.name !== tabName);
+      localStorage.setItem('sites', JSON.stringify(updatedSites));
+      return updatedSites;
+    });
+  };
+
   return (
     <Box sx={{ flexGrow: 1 }}>
       <AppBar position="static">
@@ -173,6 +181,7 @@ const App: React.FC = () => {
                   initialPrompt={site.prompt}   
                   initialGenerateImages={site.generateImages}
                   onPromptSave={(prompt: string, generateImages: boolean) => handlePromptSave(site.route, prompt, generateImages)}
+                  onTabDelete={handleTabDelete}
                   backendUrl={config.backendUrl}
                 />
               } 

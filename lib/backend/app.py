@@ -884,5 +884,59 @@ def generate_site_items(prompt, item_type, limit, generate_images):
 
     print(f"Total items generated: {item_count}")
 
+from botocore.exceptions import ClientError
+
+@app.route('/api/site-items', methods=['DELETE'])
+def delete_site_item():
+    data = request.json
+    title = data.get('title')
+    item_type = data.get('item_type')
+    
+    if not item_type:
+        return jsonify({'error': 'item_type is required'}), 400
+
+    if not title:  # We only need to check for title, as item_type is required for both cases
+        try:
+            # Scan for all items with the given item_type
+            print(f"Scanning for items with item_type: {item_type}")
+            response = DYNAMODB_CLIENT.scan(
+                TableName=SITE_INFO_TABLE_NAME,
+                FilterExpression='item_type = :item_type',
+                ExpressionAttributeValues={':item_type': {'S': item_type}}
+            )
+            items = response['Items']
+            print(f"Found {len(items)} items to delete")
+
+            # Delete each item individually
+            deleted_count = 0
+            for item in items:
+                try:
+                    DYNAMODB_CLIENT.delete_item(
+                        TableName=SITE_INFO_TABLE_NAME,
+                        Key={
+                            'item_type': {'S': item_type},
+                            'title': {'S': item['title']['S']}  # Assuming 'title' is a string attribute
+                        }
+                    )
+                    deleted_count += 1
+                except ClientError as e:
+                    print(f"Error deleting item {item['title']['S']}: {e}")
+
+            print(f"Successfully deleted {deleted_count} out of {len(items)} items")
+            return jsonify({'message': f'Successfully deleted {deleted_count} items'}), 200
+        except ClientError as e:
+            print(f"Error scanning or deleting items: {e}")
+            return jsonify({'error': 'Failed to delete items'}), 500
+    else:
+        try:
+            DYNAMODB_CLIENT.delete_item(
+                TableName=SITE_INFO_TABLE_NAME,
+                Key={'item_type': {'S': item_type}, 'title': {'S': title}}
+            )
+            return jsonify({'message': f'Successfully deleted item: {title}'}), 200
+        except ClientError as e:
+            print(f"Error deleting single item: {e}")
+            return jsonify({'error': 'Failed to delete item'}), 500
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=os.environ.get('DEBUG', False))

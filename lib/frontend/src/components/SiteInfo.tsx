@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Typography, Paper, TextField, Button, Box, Grid, Card, CardContent, CardActions, Skeleton, Checkbox, FormControlLabel, CardMedia } from '@mui/material';
+import { Typography, Paper, TextField, Button, Box, Grid, Card, CardContent, CardActions, Skeleton, Checkbox, FormControlLabel, CardMedia, IconButton, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle } from '@mui/material';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { library } from '@fortawesome/fontawesome-svg-core';
 import { fas } from '@fortawesome/free-solid-svg-icons';
 import AddIcon from '@mui/icons-material/Add';
 import CircularProgress from '@mui/material/CircularProgress';
-
+import DeleteIcon from '@mui/icons-material/Delete';
+import { useNavigate } from 'react-router-dom';
 
 library.add(fas);
 
@@ -15,6 +16,7 @@ interface SiteInfoProps {
   initialPrompt: string;
   initialGenerateImages: boolean;
   onPromptSave: (prompt: string, generateImages: boolean) => void;
+  onTabDelete: (tabName: string) => void;
 }
 
 interface CardData {
@@ -30,7 +32,7 @@ const Spinner = () => (
   </Box>
 );
 
-const SiteInfo: React.FC<SiteInfoProps> = ({ siteName, initialPrompt, onPromptSave, backendUrl }) => {
+const SiteInfo: React.FC<SiteInfoProps> = ({ siteName, initialPrompt, onPromptSave, backendUrl, onTabDelete }) => {
   const [prompt, setPrompt] = useState(initialPrompt);
   const [savedPrompt, setSavedPrompt] = useState(initialPrompt);
   const [showPromptInput, setShowPromptInput] = useState(!initialPrompt);
@@ -40,6 +42,10 @@ const SiteInfo: React.FC<SiteInfoProps> = ({ siteName, initialPrompt, onPromptSa
   const [itemLimit, setItemLimit] = useState('12');
   const [generateImages, setGenerateImages] = useState(false);
   const fetchedRef = useRef(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [cardToDelete, setCardToDelete] = useState<CardData | null>(null);
+  const [deleteTabDialogOpen, setDeleteTabDialogOpen] = useState(false);
+  const navigate = useNavigate();
 
   const itemType = siteName.toLowerCase().replace(/\s+/g, '-');
 
@@ -153,6 +159,75 @@ const SiteInfo: React.FC<SiteInfoProps> = ({ siteName, initialPrompt, onPromptSa
     }
   };
 
+  const handleDeleteClick = (card: CardData) => {
+    setCardToDelete(card);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (cardToDelete) {
+      try {
+        const response = await fetch(`${backendUrl}/site-items`, {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            item_type: itemType,
+            title: cardToDelete.title,
+          }),
+        });
+
+        if (response.ok) {
+          setCards(cards.filter(card => card.title !== cardToDelete.title));
+        } else {
+          console.error('Failed to delete item');
+        }
+      } catch (error) {
+        console.error('Error deleting item:', error);
+      }
+    }
+    setDeleteDialogOpen(false);
+    setCardToDelete(null);
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteDialogOpen(false);
+    setCardToDelete(null);
+  };
+
+  const handleDeleteTabClick = () => {
+    setDeleteTabDialogOpen(true);
+  };
+
+  const handleDeleteTabConfirm = async () => {
+    try {
+      const response = await fetch(`${backendUrl}/site-items`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          item_type: itemType,
+        }),
+      });
+
+      if (response.ok) {
+        onTabDelete(siteName);
+        navigate('/');
+      } else {
+        console.error('Failed to delete tab');
+      }
+    } catch (error) {
+      console.error('Error deleting tab:', error);
+    }
+    setDeleteTabDialogOpen(false);
+  };
+
+  const handleDeleteTabCancel = () => {
+    setDeleteTabDialogOpen(false);
+  };
+
   const PlaceholderCard = () => (
     <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <CardContent sx={{ flexGrow: 1 }}>
@@ -173,9 +248,19 @@ const SiteInfo: React.FC<SiteInfoProps> = ({ siteName, initialPrompt, onPromptSa
 
   return (
     <Box sx={{ mt: 4 }}>
-      <Typography variant="h4" gutterBottom>
-        {siteName}
-      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+        <Typography variant="h4" component="div">
+          {siteName}
+        </Typography>
+        <IconButton
+          size="small"
+          onClick={handleDeleteTabClick}
+          sx={{ ml: 2 }}
+        >
+          <DeleteIcon />
+        </IconButton>
+      </Box>
+
       {showPromptInput ? (
         <Box component="form" noValidate autoComplete="off" sx={{ mt: 2, mb: 4 }}>
           <Grid container spacing={2} alignItems="center">
@@ -226,13 +311,8 @@ const SiteInfo: React.FC<SiteInfoProps> = ({ siteName, initialPrompt, onPromptSa
       )}
 
       <Grid container spacing={2}>
-        {savedPrompt && (loading && cards.length === 0
-          ? Array.from(new Array(parseInt(itemLimit))).map((_, index) => (
-              <Grid item xs={12} sm={6} md={4} key={`placeholder-${index}`}>
-                <PlaceholderCard />
-              </Grid>
-            ))
-          : cards.map((card, index) => (
+       
+          {cards.map((card, index) => (
               <Grid item xs={12} sm={6} md={4} key={index}>
                 <Card 
                   sx={{ 
@@ -254,9 +334,13 @@ const SiteInfo: React.FC<SiteInfoProps> = ({ siteName, initialPrompt, onPromptSa
                       boxShadow: 6,
                       transform: 'scale(1.03)',
                     },
+                    position: 'relative',
+                    '&:hover .delete-button': {
+                      opacity: 1,
+                    },
                   }}
                 >
-{card.image && (
+                  {card.image && (
                     <CardMedia
                       component="img"
                       height="140"
@@ -277,12 +361,29 @@ const SiteInfo: React.FC<SiteInfoProps> = ({ siteName, initialPrompt, onPromptSa
                       {card.description}
                     </Typography>
                   </CardContent>
-                  <CardActions>
+                  <CardActions sx={{ justifyContent: 'flex-end', position: 'relative' }}>
                     <Button size="small">Learn More</Button>
+                    <IconButton
+                      className="delete-button"
+                      size="small"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteClick(card);
+                      }}
+                      sx={{
+                        position: 'absolute',
+                        bottom: 8,
+                        right: 8,
+                        opacity: 0,
+                        transition: 'opacity 0.3s',
+                      }}
+                    >
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
                   </CardActions>
                 </Card>
               </Grid>
-            )))}
+            ))}
 
         {/* Add New Card */}
         {savedPrompt && (
@@ -301,7 +402,7 @@ const SiteInfo: React.FC<SiteInfoProps> = ({ siteName, initialPrompt, onPromptSa
               },
             }}
           >
-            {savedPrompt && cards.length < parseInt(itemLimit) ? (              
+            {savedPrompt && loading ? (              
             <CardContent sx={{ flexGrow: 1, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
                 <Spinner />
               </CardContent>
@@ -322,6 +423,38 @@ const SiteInfo: React.FC<SiteInfoProps> = ({ siteName, initialPrompt, onPromptSa
    
       </Grid>
 
+      {/* Delete Tab Dialog */}
+      <Dialog
+        open={deleteTabDialogOpen}
+        onClose={handleDeleteTabCancel}
+      >
+        <DialogTitle>Confirm Tab Deletion</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Are you sure you want to delete this entire tab and all its items?
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleDeleteTabCancel}>Cancel</Button>
+          <Button onClick={handleDeleteTabConfirm} color="error">Delete</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={handleDeleteCancel}
+      >
+        <DialogTitle>Confirm Deletion</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Are you sure you want to delete this item?
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleDeleteCancel}>Cancel</Button>
+          <Button onClick={handleDeleteConfirm} color="error">Delete</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };
