@@ -37,6 +37,7 @@ interface Site {
   name: string;
   route: string;
   prompt: string;
+  generateImages: boolean;
 }
 
 const App: React.FC = () => {
@@ -75,7 +76,7 @@ const App: React.FC = () => {
           alert('A tab with this name already exists. Please choose a unique name.');
           return prevSites;
         }
-        const updatedSites = [...prevSites, { name: newSiteName.trim(), route: newRoute, prompt: '' }];
+        const updatedSites = [...prevSites, { name: newSiteName.trim(), route: newRoute, prompt: '', generateImages: false }];
         localStorage.setItem('sites', JSON.stringify(updatedSites));
         return updatedSites;
       });
@@ -85,10 +86,10 @@ const App: React.FC = () => {
     }
   };
 
-  const handlePromptSave = (route: string, prompt: string) => {
+  const handlePromptSave = (route: string, prompt: string, generateImages: boolean) => {
     setSites(prevSites => {
       const updatedSites = prevSites.map(site => 
-        site.route === route ? { ...site, prompt } : site
+        site.route === route ? { ...site, prompt, generateImages } : site
       );
       localStorage.setItem('sites', JSON.stringify(updatedSites));
       return updatedSites;
@@ -169,8 +170,9 @@ const App: React.FC = () => {
               element={
                 <SiteInfo 
                   siteName={site.name} 
-                  initialPrompt={site.prompt} 
-                  onPromptSave={(prompt) => handlePromptSave(site.route, prompt)}
+                  initialPrompt={site.prompt}   
+                  initialGenerateImages={site.generateImages}
+                  onPromptSave={(prompt: string, generateImages: boolean) => handlePromptSave(site.route, prompt, generateImages)}
                   backendUrl={config.backendUrl}
                 />
               } 

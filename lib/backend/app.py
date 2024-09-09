@@ -9,6 +9,10 @@ import re
 from dotenv import load_dotenv
 from botocore.exceptions import ClientError
 import uuid
+import base64
+import random
+import io
+from PIL import Image
 
 # Check if any of the required environment variables are missing
 required_env_vars = ["AWS_REGION", "CUSTOMER_NAME", "KNOWLEDGE_BASE_ID"]
@@ -501,6 +505,9 @@ def generate_products(limit):
 
             Text: {doc.page_content}
             """
+
+            if len(products) > 0:
+                extraction_prompt += f"\nHere are the products that have already been extracted. Do not duplicate any of these products: {products}"
             
             try:
                 extraction_response = BEDROCK_CLIENT.converse(
@@ -674,6 +681,8 @@ def get_site_items():
     prompt = request.args.get('prompt', type=str)
     item_type = request.args.get('item_type', default='', type=str)
     limit = request.args.get('limit', default=12, type=int)
+    generate_images = request.args.get('generate_images', default='False', type=str).lower() == 'true'
+    print("generate_images: ", generate_images)
     if not prompt or not item_type:
         return jsonify({'error': 'Both prompt and item_type are required'}), 400
 
@@ -697,33 +706,39 @@ def get_site_items():
                     item_dict = {
                         'title': item['title']['S'],
                         'description': item['description']['S'],
-                        'icon': item['icon']['S']
+                        'icon': item['icon']['S'],
+                        'link': item['link']['S']
                     }
+                    if 'image' in item:
+                        item_dict['image'] = item['image']['S']
                     yield f"data: {json.dumps(item_dict)}\n\n"
             else:
                 # If no items in DynamoDB, generate them based on the prompt
                 print(f"No items found in DynamoDB, generating new items")
-                generated_items = generate_site_items(prompt, item_type, limit)
-                for item in generated_items:
+                for item in generate_site_items(prompt, item_type, limit, generate_images):
                     yield f"data: {json.dumps(item)}\n\n"
 
             yield f"data: {json.dumps({'type': 'stop'})}\n\n"
         except Exception as e:
-            print(f"Error retrieving or generating site items: {str(e)}")
+            print(f"Error retrieving or generating site items: {e}")
+            import traceback
+            print("Error details:")
+            print(traceback.format_exc())
+
             yield f"data: {json.dumps({'error': 'Failed to retrieve or generate site items'})}\n\n"
 
     return Response(generate(), mimetype='text/event-stream')
 
-def generate_site_items(prompt, item_type, limit):
+def generate_site_items(prompt, item_type, limit, generate_images):
     print(f"Generating items for prompt: {prompt}, item_type: {item_type}")
 
-    generated_items = []
     processed_titles = set()  # To keep track of processed item titles
+    item_count = 0
 
     docs = products_retriever.get_relevant_documents(f"{customer_name} {prompt}")
     
     for doc in docs:
-        if len(generated_items) >= limit:
+        if item_count >= limit:
             break  # Stop processing if we've reached the limit
 
         context = doc.metadata['location']['webLocation']['url'] + "\n\n" + doc.page_content
@@ -734,13 +749,13 @@ def generate_site_items(prompt, item_type, limit):
         <context>
         {context}
         </context>
-
+        
         <instructions>
-           For each item, provide:
+        For each item, provide:
         1. A title - The name, title, or key feature of the item
         2. A brief description of the product as it relates to {customer_name} and {prompt}
         3. An appropriate Font Awesome icon name (without the 'fa-' prefix)
-
+        {'''4. A prompt to generate a generic stock image for the item. Be generic. Do not mention company or brand names''' if generate_images else ""}
         Use a consistent naming convention for all the titles. 
 
         Return the result as a JSON array of objects with the following structure:
@@ -748,7 +763,8 @@ def generate_site_items(prompt, item_type, limit):
             {{
                 "title": "Item title",
                 "description": "Brief description of the item",
-                "icon": "font-awesome-icon-name"
+                "icon": "font-awesome-icon-name",
+                {'''"image_prompt": "A stock image of..."''' if generate_images else ""}
             }}
         ]
         If no clear items are identified, return an empty array.
@@ -759,7 +775,10 @@ def generate_site_items(prompt, item_type, limit):
 
         Context:
         """
-
+        
+        if processed_titles:
+            extraction_prompt += f"\nHere are the items that have already been extracted. Do not duplicate any of these items: {list(processed_titles)}"
+        print(f"Extraction prompt: {extraction_prompt}")
         try:
             extraction_response = BEDROCK_CLIENT.converse(
                 modelId="anthropic.claude-3-sonnet-20240229-v1:0",
@@ -782,35 +801,88 @@ def generate_site_items(prompt, item_type, limit):
             
             for item in extracted_items:
                 metadata_link = doc.metadata.get('location', {}).get('webLocation', {}).get('url')
-                # print(f"Extracted item: {json.dumps(item, indent=2)}")
-                if len(generated_items) >= limit:
+                if item_count >= limit:
                     break  # Stop processing if we've reached the limit
 
                 if item.get("title") and item["title"] not in processed_titles:
                     processed_titles.add(item["title"])
-                    generated_items.append(item)
-                    # print(f"Generated item: {json.dumps(item, indent=2)}")
+                    item_count += 1
+                    if generate_images:
+                        # Generate an image for the item
+                        try:
+                            image_prompt = item.get("image_prompt", f"A stock image of {item['title']}")
+                            image_request = {
+                                "taskType": "TEXT_IMAGE",
+                                "textToImageParams": {"text": image_prompt},
+                                "imageGenerationConfig": {
+                                    "numberOfImages": 1,
+                                    "quality": "standard",
+                                    "cfgScale": 8.0,
+                                    "height": 384,
+                                    "width": 704,
+                                    "seed": random.randint(0, 2147483647),
+                                },
+                            }
+                            response = BEDROCK_CLIENT.invoke_model(
+                                modelId="amazon.titan-image-generator-v2:0",
+                                body=json.dumps(image_request)
+                            )
+                            response_body = json.loads(response["body"].read())
+                            image_base64 = response_body["images"][0]
+                            
+                            # Compress the image to fit into 400kb
+                            image_data = base64.b64decode(image_base64)
+                            image = Image.open(io.BytesIO(image_data))
+                            
+                            # Start with a high quality and reduce it until the image is small enough
+                            quality = 95
+                            # Resize the image to about 70% of its original width
+                            # new_width = int(image.width * 0.7)
+                            # new_height = int(image.height * (new_width / image.width))
+                            # image = image.resize((new_width, new_height), Image.LANCZOS)
+
+                            while True:
+                                buffer = io.BytesIO()
+                                image.save(buffer, format="JPEG", quality=quality)
+                                if buffer.getbuffer().nbytes <= 400 * 1024 or quality <= 5:
+                                    break
+                                quality -= 5
+                            # Convert the compressed image back to base64
+                            compressed_image_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+                            
+                            # Add the compressed image to the item
+                            item['image'] = compressed_image_base64
+                        except Exception as e:
+                            print(f"Error generating image: {str(e)}")
+                            print(f"Image prompt: {image_prompt}")
+                            item['image'] = None  # Set to None if image generation fails
 
                     # Store the item in DynamoDB
                     try:
+                        dynamodb_item = {
+                            'item_type': {'S': item_type},
+                            'title': {'S': item['title']},
+                            'description': {'S': item['description']},
+                            'icon': {'S': item.get('icon', 'cube')},
+                            'link': {'S': metadata_link},
+                            'image_prompt': {'S': item.get('image_prompt', '')}
+                        }
+                        if 'image' in item and item['image']:
+                            dynamodb_item['image'] = {'S': item['image']}
+
                         DYNAMODB_CLIENT.put_item(
                             TableName=SITE_INFO_TABLE_NAME,
-                            Item={
-                                'item_type': {'S': item_type},
-                                'title': {'S': item['title']},
-                                'description': {'S': item['description']},
-                                'icon': {'S': item.get('icon', 'cube')},
-                                'link': {'S': metadata_link}
-                            }
+                            Item=dynamodb_item
                         )
                     except Exception as e:
                         print(f"Error storing item in DynamoDB: {str(e)}")
 
+                    yield item
+
         except Exception as e:
             print(f"Error extracting items from document: {str(e)}")
 
-    print(f"Total items generated: {len(generated_items)}")
-    return generated_items
+    print(f"Total items generated: {item_count}")
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=os.environ.get('DEBUG', False))
