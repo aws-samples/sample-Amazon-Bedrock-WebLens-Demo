@@ -94,7 +94,12 @@ const SiteInfo: React.FC<SiteInfoProps> = ({ siteName, initialPrompt, onPromptSa
                 if (data.type === 'stop') {
                   setLoading(false);
                 } else {
-                  setCards(prevCards => [...prevCards, data]);
+                  setCards(prevCards => {
+                    if (prevCards.some(card => card.title === data.title)) {
+                      return prevCards;
+                    }
+                    return [...prevCards, data];
+                  });
                 }
               } catch (error) {
                 console.warn('Incomplete JSON, waiting for more data');
@@ -108,7 +113,12 @@ const SiteInfo: React.FC<SiteInfoProps> = ({ siteName, initialPrompt, onPromptSa
           try {
             const data = JSON.parse(partialData.slice(6));
             if (data.type !== 'stop') {
-              setCards(prevCards => [...prevCards, data]);
+              setCards(prevCards => {
+                if (prevCards.some(card => card.title === data.title)) {
+                  return prevCards;
+                }
+                return [...prevCards, data];
+              });
             }
           } catch (error) {
             console.error('Error parsing final SSE data:', error);
@@ -227,20 +237,6 @@ const SiteInfo: React.FC<SiteInfoProps> = ({ siteName, initialPrompt, onPromptSa
   const handleDeleteTabCancel = () => {
     setDeleteTabDialogOpen(false);
   };
-
-  const PlaceholderCard = () => (
-    <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <CardContent sx={{ flexGrow: 1 }}>
-        <Skeleton variant="circular" width={40} height={40} sx={{ marginBottom: 2 }} />
-        <Skeleton variant="text" sx={{ fontSize: '1.5rem', marginBottom: 1 }} />
-        <Skeleton variant="text" sx={{ fontSize: '1rem' }} />
-        <Skeleton variant="text" sx={{ fontSize: '1rem' }} />
-      </CardContent>
-      <CardActions>
-        <Skeleton variant="rectangular" width={100} height={36} />
-      </CardActions>
-    </Card>
-  );
 
   if (error) {
     return <Typography color="error">{error}</Typography>;
@@ -361,19 +357,21 @@ const SiteInfo: React.FC<SiteInfoProps> = ({ siteName, initialPrompt, onPromptSa
                       {card.description}
                     </Typography>
                   </CardContent>
-                  <CardActions sx={{ justifyContent: 'flex-end', position: 'relative' }}>
+                  <CardActions sx={{ justifyContent: 'flex-start', position: 'relative' }}>
                     <Button size="small">Learn More</Button>
+                  </CardActions>
+                  <CardActions sx={{ justifyContent: 'flex-end', position: 'relative' }}>
                     <IconButton
                       className="delete-button"
-                      size="small"
+                      size="medium"
                       onClick={(e) => {
                         e.stopPropagation();
                         handleDeleteClick(card);
                       }}
                       sx={{
                         position: 'absolute',
-                        bottom: 8,
-                        right: 8,
+                        bottom: 20,
+                        right: 20,
                         opacity: 0,
                         transition: 'opacity 0.3s',
                       }}
