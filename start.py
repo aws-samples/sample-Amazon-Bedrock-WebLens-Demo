@@ -6,6 +6,8 @@ import json
 import os
 import shutil
 import threading
+import time
+import base64
 
 def npm_install():
     subprocess.run(["npm", "install"], check=True)
@@ -177,8 +179,103 @@ def load_context():
     with open('cdk.context.json', 'r') as f:
         return json.load(f)
 
+def check_bedrock_models():
+    models_check_file = os.path.join('customers', "bedrock_models_check.json")
+
+    # Check if the file exists
+    if os.path.exists(models_check_file):
+        with open(models_check_file, 'r') as f:
+            check_data = json.load(f)
+        if check_data and all(status == "available" for status in check_data.values()):
+            print("    ✅ Using cached Bedrock models check. All required models are available.")
+            return
+
+    print("🔍 Checking for required Bedrock models...")
+    required_models = [
+        "anthropic.claude-3-5-sonnet-20240620-v1:0",
+        "anthropic.claude-3-haiku-20240307-v1:0",
+        "amazon.titan-image-generator-v2:0"
+    ]
+
+    models_status = {}
+
+    for model_id in required_models:
+        print(f"  Testing model: {model_id}")
+        try:
+            # Prepare a simple test prompt
+            if "claude" in model_id:
+                body = base64.b64encode(json.dumps({
+                    "anthropic_version": "bedrock-2023-05-31",
+                    "max_tokens": 10,
+                    "messages": [
+                        {"role": "user", "content": "Hello"}
+                    ]
+                }).encode('utf-8'))
+            elif "titan-image-generator" in model_id:
+                body = base64.b64encode(json.dumps({
+                    "taskType": "TEXT_IMAGE",
+                    "textToImageParams": {
+                        "text": "A simple test image",
+                        "negativeText": "blurry, distorted, low quality",
+                    },
+                    "imageGenerationConfig": {
+                        "quality": "standard",
+                        "width": 512,
+                        "height": 512,
+                        "numberOfImages": 1,
+                        "cfgScale": 8.0,
+                        "seed": 42
+                    }
+                }).encode('utf-8'))
+
+            # Invoke the model
+            command = [
+                "aws", "bedrock-runtime", "invoke-model",
+                "--model-id", model_id,
+                "--body", body,
+                "--content-type", "application/json",
+                "--region", "us-east-1",
+                "--output", "json",
+                "output.txt"
+            ]
+            
+            result = subprocess.run(command, capture_output=True, text=True, check=True)
+            
+            if result.returncode == 0:
+                print(f"    ✅ Model {model_id} is available and functioning.")
+                models_status[model_id] = "available"
+            else:
+                print(f"    ❌ Error invoking model {model_id}: {result.stderr}")
+                models_status[model_id] = "error"
+
+        except subprocess.CalledProcessError as e:
+            print(f"    ❌ Error invoking model {model_id}: {e.stderr}")
+            models_status[model_id] = "error"
+
+    # Only save the check results if all models are available
+    if all(status == "available" for status in models_status.values()):
+        with open(models_check_file, 'w') as f:
+            json.dump(models_status, f)
+        print("    ✅ All required Bedrock models are available and functioning.")
+    else:
+        print("    ❌ Some required Bedrock models are not available.")
+        print("Please ensure you have access to these models in the us-east-1 region.")
+        print("🔗 https://docs.aws.amazon.com/bedrock/latest/userguide/model-access-modify.html")
+        sys.exit(1)
+
+def run_process(command, working_dir, prefix):
+    current_dir = os.getcwd()
+    os.chdir(working_dir)
+    try:
+        process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, universal_newlines=True)
+        for line in iter(process.stdout.readline, ''):
+            sys.stdout.write(f"{prefix}: {line}")
+            sys.stdout.flush()
+    finally:
+        os.chdir(current_dir)
+
 def run_local():
-    # Check if python or python3 is on the path and set python_command
+    print("🚀 Starting local development environment...")
     python_command = None
     for cmd in ['python', 'python3']:
         try:
@@ -195,26 +292,28 @@ def run_local():
         sys.exit(1)
 
     print(f"Using Python command: {python_command}")
-    def run_frontend():
-        frontend_dir = os.path.join("lib", "frontend")
-        if not os.path.exists(frontend_dir):
-            print(f"❌ Frontend directory not found: {frontend_dir}")
-            return
-        os.chdir(frontend_dir)
-        process = subprocess.Popen("npm run start", shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-        stream_output(process, "Frontend")
 
-    def run_backend():
-        backend_dir = os.path.dirname(os.path.abspath(__file__))
-        os.chdir(backend_dir)
-        process = subprocess.Popen(f"{python_command} start.py", shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-        stream_output(process, "Backend")
+    # Get the project root directory
+    project_root = os.path.dirname(os.path.abspath(__file__))
 
-    print("🚀 Starting local development environment...")
-    frontend_thread = threading.Thread(target=run_frontend)
-    backend_thread = threading.Thread(target=run_backend)
+    # Define frontend and backend directories
+    frontend_dir = os.path.join(project_root, "lib", "frontend")
+    backend_dir = os.path.join(project_root, "lib", "backend")
 
+    # Check if directories exist
+    if not os.path.exists(frontend_dir):
+        print(f"❌ Frontend directory not found: {frontend_dir}")
+        return
+    if not os.path.exists(backend_dir):
+        print(f"❌ Backend directory not found: {backend_dir}")
+        return
+
+    # Start frontend
+    frontend_thread = threading.Thread(target=run_process, args=("npm run start", frontend_dir, "Frontend"))
     frontend_thread.start()
+
+    # Start backend
+    backend_thread = threading.Thread(target=run_process, args=(f"{python_command} app.py", backend_dir, "Backend"))
     backend_thread.start()
 
     try:
@@ -222,38 +321,6 @@ def run_local():
         backend_thread.join()
     except KeyboardInterrupt:
         print("\n🛑 Stopping local development environment...")
-
-def check_bedrock_models():
-
-    try:
-        result = subprocess.run(["aws", "bedrock", "list-foundation-models", "--region", "us-east-1"], capture_output=True, text=True)
-        if result.returncode != 0:
-            print(f"    ❌ Error running AWS CLI command: {result.stderr}")
-            sys.exit(1)
-
-        models = json.loads(result.stdout)
-        required_models = [
-            "anthropic.claude-3-sonnet-20240229-v1:0",
-            "anthropic.claude-3-haiku-20240307-v1:0",
-            "amazon.titan-image-generator-v2:0",
-        ]
-
-        available_models = [model["modelId"] for model in models["modelSummaries"]]
-        missing_models = [model for model in required_models if model not in available_models]
-
-        if missing_models:
-            print("    ❌ Missing Bedrock model access:")
-            print("    The following required Bedrock models are not available in your account:")
-            for model in missing_models:
-                print(f"       • {model}")
-            print("    Please ensure you have access to these models in the us-east-1 region.")
-            print("    🔗 https://docs.aws.amazon.com/bedrock/latest/userguide/model-access-modify.html")
-            sys.exit(1)
-        else:
-            print("    ✅ All required Bedrock models are available.")
-    except Exception as e:
-        print(f"    ❌ Error checking Bedrock models: {str(e)}")
-        sys.exit(1)
 
 def main():
     print("🔍 Checking for required dependencies...")

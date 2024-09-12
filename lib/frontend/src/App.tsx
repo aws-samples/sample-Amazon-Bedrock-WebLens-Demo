@@ -169,8 +169,20 @@ const App: React.FC = () => {
       <Container maxWidth="lg" sx={{ mt: 4 }}>
         <Routes>
           <Route path="/" element={<ChatBot backendUrl={config.backendUrl} customerName={config.customerName} />} />
-          <Route path="/products" element={<ProductGrid backendUrl={config.backendUrl} />} />
-          <Route path="/product/:productName" element={<ProductDetails backendUrl={config.backendUrl} />} />
+          <Route
+            key="products"
+            path="/products"
+            element={
+              <SiteInfo
+                siteName="Products"
+                initialPrompt="a list of products and services"
+                initialGenerateImages={true}
+                onPromptSave={(prompt: string, generateImages: boolean) => handlePromptSave('/products', prompt, generateImages)}
+                onTabDelete={handleTabDelete}
+                backendUrl={config.backendUrl}
+              />
+            }
+          />
           {sites.map((site) => (
             <Route 
               key={site.name} 

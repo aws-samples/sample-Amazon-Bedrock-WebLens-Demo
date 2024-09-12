@@ -32,7 +32,7 @@ const Spinner = () => (
   </Box>
 );
 
-const SiteInfo: React.FC<SiteInfoProps> = ({ siteName, initialPrompt, onPromptSave, backendUrl, onTabDelete }) => {
+const SiteInfo: React.FC<SiteInfoProps> = ({ siteName, initialPrompt, onPromptSave, backendUrl, onTabDelete, initialGenerateImages }) => {
   const [prompt, setPrompt] = useState(initialPrompt);
   const [savedPrompt, setSavedPrompt] = useState(initialPrompt);
   const [showPromptInput, setShowPromptInput] = useState(!initialPrompt);
@@ -40,7 +40,7 @@ const SiteInfo: React.FC<SiteInfoProps> = ({ siteName, initialPrompt, onPromptSa
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [itemLimit, setItemLimit] = useState('12');
-  const [generateImages, setGenerateImages] = useState(false);
+  const [generateImages, setGenerateImages] = useState(initialGenerateImages);
   const fetchedRef = useRef(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [cardToDelete, setCardToDelete] = useState<CardData | null>(null);

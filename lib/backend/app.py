@@ -224,7 +224,7 @@ def visualize_products(question):
     print(f"Visualization prompt: {visualization_prompt}")
 
     visualization_response = BEDROCK_CLIENT.converse(
-        modelId="anthropic.claude-3-sonnet-20240229-v1:0",
+        modelId="anthropic.claude-3-5-sonnet-20240620-v1:0",
         system=[{"text": system_prompt}],
         messages=[{"role": "user", "content": [{"text": visualization_prompt}]}],
         inferenceConfig={"maxTokens": 1000, "temperature": 0, "topP": 1},
@@ -265,7 +265,7 @@ def chat():
         question = data['question']
         # Use tool calling to determine which tool to use
         response = BEDROCK_CLIENT.converse(
-            modelId="anthropic.claude-3-sonnet-20240229-v1:0",
+            modelId="anthropic.claude-3-5-sonnet-20240620-v1:0",
             system=[{"text": system_prompt}],
             messages=[
                 {"role": "user", "content": [{"text": f"Question: {question}"}]}
@@ -285,7 +285,7 @@ def chat():
                     rewrite_prompt = condense_question_template.format(chat_history=chat_history_str, question=question_to_answer)
                     try:
                         rewrite_response = BEDROCK_CLIENT.converse(
-                            modelId="anthropic.claude-3-sonnet-20240229-v1:0",
+                            modelId="anthropic.claude-3-5-sonnet-20240620-v1:0",
                             system=[{"text": system_prompt}],
                             messages=[{"role": "user", "content": [{"text": rewrite_prompt}]}],
                             inferenceConfig={"maxTokens": 512, "temperature": 0, "topP": 1},
@@ -324,7 +324,7 @@ def chat():
 
                 # Generate the response
                 response = BEDROCK_CLIENT.converse_stream(
-                    modelId="anthropic.claude-3-sonnet-20240229-v1:0",
+                    modelId="anthropic.claude-3-5-sonnet-20240620-v1:0",
                     system=[{"text": system_prompt}],
                     messages=[{"role": "user", "content": [{"text": prompt}]}],
                     inferenceConfig={
@@ -353,7 +353,7 @@ def chat():
                 rewrite_prompt = condense_question_template.format(chat_history=chat_history_str, question=question_to_answer)
                 try:
                     rewrite_response = BEDROCK_CLIENT.converse(
-                        modelId="anthropic.claude-3-sonnet-20240229-v1:0",
+                        modelId="anthropic.claude-3-5-sonnet-20240620-v1:0",
                         system=[{"text": system_prompt}],
                         messages=[{"role": "user", "content": [{"text": rewrite_prompt}]}],
                         inferenceConfig={"maxTokens": 512, "temperature": 0, "topP": 1},
@@ -392,7 +392,7 @@ def chat():
 
             # Generate the response
             response = BEDROCK_CLIENT.converse_stream(
-                modelId="anthropic.claude-3-sonnet-20240229-v1:0",
+                modelId="anthropic.claude-3-5-sonnet-20240620-v1:0",
                 system=[{"text": system_prompt}],
                 messages=[{"role": "user", "content": [{"text": prompt}]}],
                 inferenceConfig={
@@ -511,7 +511,7 @@ def generate_products(limit):
             
             try:
                 extraction_response = BEDROCK_CLIENT.converse(
-                    modelId="anthropic.claude-3-sonnet-20240229-v1:0",
+                    modelId="anthropic.claude-3-5-sonnet-20240620-v1:0",
                     system=[{"text": system_prompt}],
                     messages=[{"role": "user", "content": [{"text": extraction_prompt}]}],
                     inferenceConfig={"maxTokens": 1000, "temperature": 0, "topP": 1},
@@ -627,7 +627,7 @@ def get_product_details(product_name):
                         yield f"data: {json.dumps({'type': 'section_start', 'section': section['type']})}\n\n"
 
                         response = BEDROCK_CLIENT.converse_stream(
-                            modelId="anthropic.claude-3-sonnet-20240229-v1:0",
+                            modelId="anthropic.claude-3-5-sonnet-20240620-v1:0",
                             system=[{"text": system_prompt}],
                             messages=[{"role": "user", "content": [{"text": section_prompt}]}],
                             inferenceConfig={"maxTokens": 500, "temperature": 0, "topP": 1},
@@ -732,7 +732,8 @@ def get_site_items():
 def generate_site_items(prompt, item_type, limit, generate_images):
     print(f"Generating items for prompt: {prompt}, item_type: {item_type}")
 
-    processed_titles = set()  # To keep track of processed item titles
+    processed_titles = set()
+# To keep track of processed item titles
     item_count = 0
 
     docs = products_retriever.get_relevant_documents(f"{customer_name} {prompt}")
@@ -776,12 +777,12 @@ def generate_site_items(prompt, item_type, limit, generate_images):
         Context:
         """
         
-        if processed_titles:
-            extraction_prompt += f"\nHere are the items that have already been extracted. Do not duplicate any of these items: {list(processed_titles)}"
+        if len(processed_titles) > 0:
+            extraction_prompt += f"\nHere are the items that have already been extracted. Do not duplicate anything of these items: {processed_titles}"
         print(f"Extraction prompt: {extraction_prompt}")
         try:
             extraction_response = BEDROCK_CLIENT.converse(
-                modelId="anthropic.claude-3-sonnet-20240229-v1:0",
+                modelId="anthropic.claude-3-5-sonnet-20240620-v1:0",
                 system=[{"text": system_prompt}],
                 messages=[{"role": "user", "content": [{"text": extraction_prompt}]}],
                 inferenceConfig={"maxTokens": 1000, "temperature": 0.5, "topP": 1},
@@ -798,7 +799,8 @@ def generate_site_items(prompt, item_type, limit, generate_images):
             else:
                 print(f"No JSON array found in the response for document: {doc.metadata['location']['webLocation']['url']}")
                 continue
-            
+            print(f"Extracted items: {extracted_items}")
+     
             for item in extracted_items:
                 metadata_link = doc.metadata.get('location', {}).get('webLocation', {}).get('url')
                 if item_count >= limit:
@@ -937,6 +939,5 @@ def delete_site_item():
         except ClientError as e:
             print(f"Error deleting single item: {e}")
             return jsonify({'error': 'Failed to delete item'}), 500
-
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=os.environ.get('DEBUG', False))
