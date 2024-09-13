@@ -36,6 +36,7 @@ DYNAMODB_CLIENT = boto3.client('dynamodb', region_name=aws_region)
 # Get the DynamoDB table name from environment variable
 PRODUCT_TABLE_NAME = os.environ.get('PRODUCT_TABLE_NAME', f"{customer_name}-kb-products")
 SITE_INFO_TABLE_NAME = os.environ.get('SITE_INFO_TABLE_NAME', f"{customer_name}-kb-info")
+CATALOGS_TABLE_NAME = os.environ.get('CATALOGS_TABLE_NAME', f"{customer_name}-kb-catalogs")
 
 # Retriever setup
 retriever = AmazonKnowledgeBasesRetriever(
@@ -689,19 +690,31 @@ def get_site_items():
     def generate():
         try:
             print(f"Searching for existing items in DynamoDB for prompt: {prompt}, item_type: {item_type}")
-            # Try to get items from DynamoDB
-            response = DYNAMODB_CLIENT.query(
-                TableName=SITE_INFO_TABLE_NAME,
-                KeyConditionExpression='item_type = :item_type',
-                ExpressionAttributeValues={
-                    ':item_type': {'S': item_type}
-                },
-                Limit=limit
-            )
-            items = response.get('Items', [])
-            print(f"Found {len(items)} items in DynamoDB")
+            # Initialize pagination variables
+            last_evaluated_key = None
+            items_count = 0
 
-            if items:
+            while True:
+                # Prepare query parameters
+                query_params = {
+                    'TableName': SITE_INFO_TABLE_NAME,
+                    'KeyConditionExpression': 'item_type = :item_type',
+                    'ExpressionAttributeValues': {
+                        ':item_type': {'S': item_type}
+                    }
+                }
+
+                # Add ExclusiveStartKey for pagination if available
+                if last_evaluated_key:
+                    query_params['ExclusiveStartKey'] = last_evaluated_key
+
+                # Execute the query
+                response = DYNAMODB_CLIENT.query(**query_params)
+                
+                items = response.get('Items', [])
+                items_count += len(items)
+
+                # Process and yield items
                 for item in items:
                     item_dict = {
                         'title': item['title']['S'],
@@ -712,7 +725,15 @@ def get_site_items():
                     if 'image' in item:
                         item_dict['image'] = item['image']['S']
                     yield f"data: {json.dumps(item_dict)}\n\n"
-            else:
+
+                # Check if there are more items to fetch
+                last_evaluated_key = response.get('LastEvaluatedKey')
+                if not last_evaluated_key:
+                    break
+
+            print(f"Found {items_count} items in DynamoDB")
+
+            if items_count == 0:
                 # If no items in DynamoDB, generate them based on the prompt
                 print(f"No items found in DynamoDB, generating new items")
                 for item in generate_site_items(prompt, item_type, limit, generate_images):
@@ -724,7 +745,6 @@ def get_site_items():
             import traceback
             print("Error details:")
             print(traceback.format_exc())
-
             yield f"data: {json.dumps({'error': 'Failed to retrieve or generate site items'})}\n\n"
 
     return Response(generate(), mimetype='text/event-stream')
@@ -939,5 +959,98 @@ def delete_site_item():
         except ClientError as e:
             print(f"Error deleting single item: {e}")
             return jsonify({'error': 'Failed to delete item'}), 500
+
+@app.route('/api/catalogs', methods=['GET'])
+def get_catalogs():
+    try:
+        response = DYNAMODB_CLIENT.scan(
+            TableName=CATALOGS_TABLE_NAME
+        )
+        catalogs = response.get('Items', [])
+        return jsonify([{
+            'id': catalog['id']['S'],
+            'name': catalog['name']['S'],
+            'route': catalog['route']['S'],
+            'prompt': catalog['prompt']['S'],
+            'generateImages': catalog['generateImages']['BOOL']
+        } for catalog in catalogs])
+    except Exception as e:
+        print(f"Error retrieving catalogs: {str(e)}")
+        return jsonify({'error': 'Failed to retrieve catalogs'}), 500
+
+@app.route('/api/catalogs', methods=['POST'])
+def add_catalog():
+    try:
+        new_catalog = request.json
+        catalog_id = str(uuid.uuid4())
+        DYNAMODB_CLIENT.put_item(
+            TableName=CATALOGS_TABLE_NAME,
+            Item={
+                'id': {'S': catalog_id},
+                'name': {'S': new_catalog['name']},
+                'route': {'S': new_catalog['route']},
+                'prompt': {'S': new_catalog['prompt']},
+                'generateImages': {'BOOL': new_catalog['generateImages']}
+            }
+        )
+        return jsonify({'id': catalog_id, **new_catalog}), 201
+    except Exception as e:
+        print(f"Error adding new catalog: {str(e)}")
+        return jsonify({'error': 'Failed to add new catalog'}), 500
+
+@app.route('/api/catalogs/<catalog_id>', methods=['PUT'])
+def update_catalog(catalog_id):
+    try:
+        updated_catalog = request.json
+        update_expression = []
+        expression_attribute_names = {}
+        expression_attribute_values = {}
+
+        if 'name' in updated_catalog:
+            update_expression.append('#name = :name')
+            expression_attribute_names['#name'] = 'name'
+            expression_attribute_values[':name'] = {'S': updated_catalog['name']}
+
+        if 'route' in updated_catalog:
+            update_expression.append('#route = :route')
+            expression_attribute_names['#route'] = 'route'
+            expression_attribute_values[':route'] = {'S': updated_catalog['route']}
+
+        if 'prompt' in updated_catalog:
+            update_expression.append('#prompt = :prompt')
+            expression_attribute_names['#prompt'] = 'prompt'
+            expression_attribute_values[':prompt'] = {'S': updated_catalog['prompt']}
+
+        if 'generateImages' in updated_catalog:
+            update_expression.append('#generateImages = :generateImages')
+            expression_attribute_names['#generateImages'] = 'generateImages'
+            expression_attribute_values[':generateImages'] = {'BOOL': updated_catalog['generateImages']}
+
+        if update_expression:
+            DYNAMODB_CLIENT.update_item(
+                TableName=CATALOGS_TABLE_NAME,
+                Key={'id': {'S': catalog_id}},
+                UpdateExpression="SET " + ", ".join(update_expression),
+                ExpressionAttributeNames=expression_attribute_names,
+                ExpressionAttributeValues=expression_attribute_values
+            )
+        return jsonify(updated_catalog)
+    except Exception as e:
+        print(f"Error updating catalog:")
+        print(e.with_traceback)
+        return jsonify({'error': 'Failed to update catalog'}), 500
+
+@app.route('/api/catalogs/<catalog_id>', methods=['DELETE'])
+def delete_catalog(catalog_id):
+    try:
+        DYNAMODB_CLIENT.delete_item(
+            TableName=CATALOGS_TABLE_NAME,
+            Key={'id': {'S': catalog_id}}
+        )
+        return jsonify({'message': 'Catalog deleted successfully'})
+    except Exception as e:
+        print(f"Error deleting catalog: {str(e)}")
+        return jsonify({'error': 'Failed to delete catalog'}), 500
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=os.environ.get('DEBUG', False))

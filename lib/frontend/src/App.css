@@ -28,6 +28,67 @@
   color: #61dafb;
 }
 
+/* ... keep existing styles ... */
+
+.sidebar {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-header {
+  padding: 16px;
+  background-color: #f5f5f5;
+  color: #333;
+  font-weight: bold;
+}
+
+.sidebar-item {
+  transition: background-color 0.3s;
+}
+
+.sidebar-item:hover {
+  background-color: #e0e0e0;
+}
+
+.chat-item {
+  background-color: #e3f2fd;
+  font-weight: bold;
+}
+
+.chat-item:hover {
+  background-color: #bbdefb;
+}
+
+.add-catalog-container {
+  margin-top: auto;
+  padding: 16px;
+}
+
+.add-catalog-button {
+  background-color: #1976d2;
+  color: white;
+  transition: background-color 0.3s;
+  margin-top: 8px;
+  margin-bottom: 8px;
+}
+
+.add-catalog-button:hover {
+  background-color: #1565c0;
+}
+
+.add-catalog-input {
+  background-color: white;
+  margin-top: 8px;
+  margin-bottom: 8px;
+}
+
+/* Add this new style for the emoji icons */
+.MuiListItemIcon-root {
+  min-width: 40px;
+  font-size: 1.5rem;
+}
+
 @keyframes App-logo-spin {
   from {
     transform: rotate(0deg);

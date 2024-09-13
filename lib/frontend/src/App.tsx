@@ -4,16 +4,24 @@ import ProductGrid from './components/Products';
 import ProductDetails from './components/ProductDetails';
 import ChatBot from './components/ChatBot';
 import SiteInfo from './components/SiteInfo';
-import { Box, Container, AppBar, Toolbar, Typography, Button, IconButton, TextField } from '@mui/material';
+import { Box, Container, AppBar, Toolbar, Typography, Button, 
+  IconButton, TextField, List, ListItem, ListItemText, Drawer, Divider, ListItemIcon } from '@mui/material';
 import { Link as RouterLink } from 'react-router-dom';
 import AddIcon from '@mui/icons-material/Add';
+import MenuIcon from '@mui/icons-material/Menu';
+import ChatIcon from '@mui/icons-material/Chat';
+import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
+import './App.css';
 
 // Custom hook to fetch config
 const useConfig = () => {
   const [config, setConfig] = useState<{ 
     backendUrl: string,
     customerName: string
-  } | null>(null);
+  } >({
+    backendUrl: 'localhost:5000/api',
+    customerName: 'Test Customer'
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
@@ -33,7 +41,8 @@ const useConfig = () => {
   return { config, loading, error };
 };
 
-interface Site {
+interface Catalog {
+  id: string;
   name: string;
   route: string;
   prompt: string;
@@ -42,24 +51,99 @@ interface Site {
 
 const App: React.FC = () => {
   const { config, loading, error } = useConfig();
-  const [sites, setSites] = useState<Site[]>(() => {
-    const savedSites = localStorage.getItem('sites');
-    return savedSites ? JSON.parse(savedSites) : [];
-  });
-  const [isAddingSite, setIsAddingSite] = useState(false);
-  const [newSiteName, setNewSiteName] = useState('');
+  const [catalogs, setCatalogs] = useState<Catalog[]>([]);
+  const [isAddingCatalog, setIsAddingCatalog] = useState(false);
+  const [newCatalogName, setNewCatalogName] = useState('');
+  const [drawerOpen, setDrawerOpen] = useState(true);  // Set default to true
   const navigate = useNavigate();
 
-  useEffect(() => {
-    localStorage.setItem('sites', JSON.stringify(sites));
-  }, [sites]);
+  // useEffect(() => {
+  //   fetchCatalogs();
+  // }, []);
 
   useEffect(() => {
-    const savedSites = localStorage.getItem('sites');
-    if (savedSites) {
-      setSites(JSON.parse(savedSites));
+    if (config && config.backendUrl) {
+      fetchCatalogs();
     }
-  }, []);
+  }, [config]);
+
+  const fetchCatalogs = async () => {
+    try {
+      const response = await fetch(`${config.backendUrl}/catalogs`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch catalogs');
+      }
+      const data = await response.json();
+      setCatalogs(data);
+    } catch (error) {
+      console.error('Error fetching catalogs:', error);
+    }
+  };
+
+  const handleAddCatalog = async (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter' && newCatalogName.trim()) {
+      const newRoute = `/catalog/${newCatalogName.toLowerCase().replace(/\s+/g, '-')}`;
+      try {
+        const response = await fetch(`${config.backendUrl}/catalogs`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            name: newCatalogName.trim(),
+            route: newRoute,
+            prompt: '',
+            generateImages: false
+          }),
+        });
+        if (!response.ok) {
+          throw new Error('Failed to add catalog');
+        }
+        const newCatalog = await response.json();
+        setCatalogs(prevCatalogs => [...prevCatalogs, newCatalog]);
+        setNewCatalogName('');
+        setIsAddingCatalog(false);
+        navigate(newRoute);
+      } catch (error) {
+        console.error('Error adding catalog:', error);
+      }
+    }
+  };
+
+  const handlePromptSave = async (catalogId: string, prompt: string, generateImages: boolean) => {
+    try {
+      const response = await fetch(`${config.backendUrl}/catalogs/${catalogId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ prompt, generateImages }),
+      });
+      if (!response.ok) {
+        throw new Error('Failed to update catalog');
+      }
+      const updatedCatalog = await response.json();
+      setCatalogs(prevCatalogs => prevCatalogs.map(catalog => 
+        catalog.id === catalogId ? { ...catalog, prompt, generateImages } : catalog
+      ));
+    } catch (error) {
+      console.error('Error updating catalog:', error);
+    }
+  };
+
+  const handleTabDelete = async (catalogId: string) => {
+    try {
+      const response = await fetch(`${config.backendUrl}/catalogs/${catalogId}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) {
+        throw new Error('Failed to delete catalog');
+      }
+      setCatalogs(prevCatalogs => prevCatalogs.filter(catalog => catalog.id !== catalogId));
+    } catch (error) {
+      console.error('Error deleting catalog:', error);
+    }
+  };
 
   if (loading) return <div>Loading...</div>;
   if (error) return <div>Error loading config: {error.message}</div>;
@@ -67,141 +151,172 @@ const App: React.FC = () => {
 
   document.title = `${config.customerName} AI Assistant`;
 
-  const handleAddSite = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'Enter' && newSiteName.trim()) {
-      const newRoute = `/site/${newSiteName.toLowerCase().replace(/\s+/g, '-')}`;
-      setSites(prevSites => {
-        // Check if a site with this name already exists
-        if (prevSites.some(site => site.name.toLowerCase() === newSiteName.trim().toLowerCase())) {
-          alert('A tab with this name already exists. Please choose a unique name.');
-          return prevSites;
-        }
-        const updatedSites = [...prevSites, { name: newSiteName.trim(), route: newRoute, prompt: '', generateImages: false }];
-        localStorage.setItem('sites', JSON.stringify(updatedSites));
-        return updatedSites;
-      });
-      setNewSiteName('');
-      setIsAddingSite(false);
-      navigate(newRoute);
-    }
-  };
-
-  const handlePromptSave = (route: string, prompt: string, generateImages: boolean) => {
-    setSites(prevSites => {
-      const updatedSites = prevSites.map(site => 
-        site.route === route ? { ...site, prompt, generateImages } : site
-      );
-      localStorage.setItem('sites', JSON.stringify(updatedSites));
-      return updatedSites;
-    });
-  };
-
-  const handleTabDelete = (tabName: string) => {
-    setSites(prevSites => {
-      const updatedSites = prevSites.filter(site => site.name !== tabName);
-      localStorage.setItem('sites', JSON.stringify(updatedSites));
-      return updatedSites;
-    });
-  };
-
-  return (
-    <Box sx={{ flexGrow: 1 }}>
-      <AppBar position="static">
-        <Toolbar>
-          <Typography
-            variant="h6"
-            component={RouterLink}
-            to="/"
-            sx={{
-              textDecoration: 'none',
-              color: 'inherit',
-              '&:hover': {
-                cursor: 'pointer',
-              },
-              marginRight: 2,
-            }}
-          >
-            {config.customerName} Assistant
-          </Typography>
-          <Button color="inherit" component={RouterLink} to="/">
-            Chat
-          </Button>
-          <Button color="inherit" component={RouterLink} to="/products" sx={{ marginRight: 1 }}>
-            Products
-          </Button>
-          {sites.map((site) => (
-            <Button key={site.name} color="inherit" component={RouterLink} to={site.route}>
-              {site.name}
-            </Button>
-          ))}
-          {isAddingSite ? (
+  const drawer = (
+    <Box className="sidebar">
+      <List>
+        <ListItem button component={RouterLink} to="/" className="sidebar-item chat-item">
+          <ListItemIcon>
+            <ChatIcon />
+          </ListItemIcon>
+          <ListItemText primary="Chat" />
+        </ListItem>
+      </List>
+      <Divider />
+      <Typography variant="h6" className="sidebar-header">
+        Site Catalogs
+      </Typography>
+      <List>
+        <ListItem button component={RouterLink} to="/products" className="sidebar-item">
+          <ListItemIcon>
+            <ShoppingCartIcon />
+          </ListItemIcon>
+          <ListItemText primary="Products" />
+        </ListItem>
+        {catalogs.map((catalog, index) => (
+          <ListItem key={catalog.id} button component={RouterLink} to={catalog.route} className="sidebar-item">
+            <ListItemIcon>
+              {/* You can replace these with appropriate icons or emojis */}
+              {['📚', '🎨', '🔧', '🍽️', '🏠'][index % 5]}
+            </ListItemIcon>
+            <ListItemText primary={catalog.name} />
+          </ListItem>
+        ))}
+        <ListItem>
+          {isAddingCatalog ? (
             <TextField
               size="small"
               variant="outlined"
-              placeholder="New tab name"
-              value={newSiteName}
-              onChange={(e) => setNewSiteName(e.target.value)}
-              onKeyPress={handleAddSite}
-              sx={{ 
-                backgroundColor: 'white',
-                borderRadius: 1,
-                marginLeft: 1,
-                '& .MuiOutlinedInput-root': {
-                  '& fieldset': {
-                    borderColor: 'transparent',
-                  },
-                  '&:hover fieldset': {
-                    borderColor: 'transparent',
-                  },
-                  '&.Mui-focused fieldset': {
-                    borderColor: 'transparent',
-                  },
-                },
-              }}
+              placeholder="New catalog name"
+              value={newCatalogName}
+              onChange={(e) => setNewCatalogName(e.target.value)}
+              onKeyPress={handleAddCatalog}
+              fullWidth
+              className="add-catalog-input"
             />
           ) : (
-            <IconButton color="inherit" onClick={() => setIsAddingSite(true)} size="large" sx={{ marginLeft: 1 }}>
-              <AddIcon />
-            </IconButton>
+            <Button
+              startIcon={<AddIcon />}
+              onClick={() => setIsAddingCatalog(true)}
+              fullWidth
+              className="add-catalog-button"
+            >
+              Add Catalog
+            </Button>
           )}
+        </ListItem>
+      </List>
+      <Divider />
+      <Typography variant="h6" className="sidebar-header">
+        Product Ideator
+      </Typography>
+      <List>
+        <ListItem>
+          <Button
+            startIcon={<AddIcon />}
+            onClick={() => {/* TODO: Implement new product idea functionality */}}
+            fullWidth
+            className="new-product-idea-button"
+          >
+            New Product Idea
+          </Button>
+        </ListItem>
+      </List>
+    </Box>
+  );
+
+  return (
+    <Box sx={{ display: 'flex', height: '100vh' }}>
+      <AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}>
+        <Toolbar>
+          <IconButton
+            color="inherit"
+            aria-label="toggle drawer"
+            edge="start"
+            onClick={() => setDrawerOpen(!drawerOpen)}
+            sx={{ mr: 2, display: { sm: 'none' } }}
+          >
+            <MenuIcon />
+          </IconButton>
+          <Typography variant="h6" noWrap component="div">
+            {config.customerName} Assistant
+          </Typography>
         </Toolbar>
       </AppBar>
-      <Container maxWidth="lg" sx={{ mt: 4 }}>
-        <Routes>
-          <Route path="/" element={<ChatBot backendUrl={config.backendUrl} customerName={config.customerName} />} />
-          <Route
-            key="products"
-            path="/products"
-            element={
-              <SiteInfo
-                siteName="Products"
-                initialPrompt="a list of products and services"
-                initialGenerateImages={true}
-                onPromptSave={(prompt: string, generateImages: boolean) => handlePromptSave('/products', prompt, generateImages)}
-                onTabDelete={handleTabDelete}
-                backendUrl={config.backendUrl}
-              />
-            }
-          />
-          {sites.map((site) => (
-            <Route 
-              key={site.name} 
-              path={site.route} 
+      <Drawer
+        variant="permanent"
+        open={true}
+        sx={{
+          width: 250,
+          flexShrink: 0,
+          [`& .MuiDrawer-paper`]: { width: 250, boxSizing: 'border-box' },
+          display: { xs: 'none', sm: 'block' }
+        }}
+      >
+        <Toolbar />
+        {drawer}
+      </Drawer>
+      <Drawer
+        variant="temporary"
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        ModalProps={{
+          keepMounted: true,
+        }}
+        sx={{
+          display: { xs: 'block', sm: 'none' },
+          '& .MuiDrawer-paper': { boxSizing: 'border-box', width: 250 },
+        }}
+      >
+        {drawer}
+      </Drawer>
+      <Box
+        component="main"
+        sx={{
+          flexGrow: 1,
+          p: 3,
+          width: { sm: `calc(100% - 250px)` },
+          height: '100vh',
+          overflow: 'auto',
+          mt: '64px', // Add top margin to account for AppBar height
+        }}
+      >
+        <Container maxWidth="lg">
+          <Routes>
+            <Route path="/" element={<ChatBot backendUrl={config.backendUrl} customerName={config.customerName} />} />
+            <Route
+              key="products"
+              path="/products"
               element={
-                <SiteInfo 
-                  siteName={site.name} 
-                  initialPrompt={site.prompt}   
-                  initialGenerateImages={site.generateImages}
-                  onPromptSave={(prompt: string, generateImages: boolean) => handlePromptSave(site.route, prompt, generateImages)}
-                  onTabDelete={handleTabDelete}
+                <SiteInfo
+                  siteName="Products"
+                  initialPrompt="a list of products and services"
+                  initialGenerateImages={true}
+                  onPromptSave={(prompt: string, generateImages: boolean) => handlePromptSave('products', prompt, generateImages)}
+                  onTabDelete={() => {}} // Products tab can't be deleted
                   backendUrl={config.backendUrl}
                 />
-              } 
+              }
             />
-          ))}
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </Container>
+            {catalogs.map((catalog) => (
+              <Route 
+                key={catalog.id} 
+                path={catalog.route} 
+                element={
+                  <SiteInfo 
+                    siteName={catalog.name} 
+                    initialPrompt={catalog.prompt}   
+                    initialGenerateImages={catalog.generateImages}
+                    onPromptSave={(prompt: string, generateImages: boolean) => handlePromptSave(catalog.id, prompt, generateImages)}
+                    onTabDelete={() => handleTabDelete(catalog.id)}
+                    backendUrl={config.backendUrl}
+                  />
+                } 
+              />
+            ))}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </Container>
+      </Box>
     </Box>
   );
 };

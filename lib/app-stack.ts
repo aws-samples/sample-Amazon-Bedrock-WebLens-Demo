@@ -163,5 +163,22 @@ export class AppStack extends cdk.Stack {
       'SITE_INFO_TABLE_NAME',
       siteInfoTable.tableName
     );
+
+    // Create DynamoDB table for kb-catalogs
+    const catalogsTable = new dynamodb.Table(this, 'KbCatalogsTable', {
+      tableName: `${props.customerName}-kb-catalogs`,
+      partitionKey: { name: 'id', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: cdk.RemovalPolicy.DESTROY, // Use with caution in production
+    });
+
+    // Grant read/write permissions to the backend task for the catalogs table
+    catalogsTable.grantReadWriteData(taskRole);
+
+    // Add the table name to the backend service environment variables
+    backendService.taskDefinition.defaultContainer?.addEnvironment(
+      'CATALOGS_TABLE_NAME',
+      catalogsTable.tableName
+    );
   }
 }

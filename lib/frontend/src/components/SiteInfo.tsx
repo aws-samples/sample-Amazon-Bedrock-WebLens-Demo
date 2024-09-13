@@ -23,7 +23,8 @@ interface CardData {
   title: string;
   description: string;
   icon: string;
-  image?: string;  // Add this line to include the image field
+  image?: string;
+  link?: string; 
 }
 
 const Spinner = () => (
@@ -358,7 +359,7 @@ const SiteInfo: React.FC<SiteInfoProps> = ({ siteName, initialPrompt, onPromptSa
                     </Typography>
                   </CardContent>
                   <CardActions sx={{ justifyContent: 'flex-start', position: 'relative' }}>
-                    <Button size="small">Learn More</Button>
+                    <Button size="small" component="a" href={card.link} target="_blank" rel="noopener noreferrer">Learn More</Button>
                   </CardActions>
                   <CardActions sx={{ justifyContent: 'flex-end', position: 'relative' }}>
                     <IconButton
