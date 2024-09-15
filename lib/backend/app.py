@@ -420,269 +420,6 @@ def chat():
 
     return Response(generate(), mimetype='text/event-stream')
 
-@app.route('/api/products', methods=['GET'])
-def get_products():
-    limit = request.args.get('limit', default=12, type=int)
-    def generate():
-        try:
-            # Scan the DynamoDB table to get all products
-            response = DYNAMODB_CLIENT.scan(
-                TableName=PRODUCT_TABLE_NAME,
-                Limit=limit
-            )
-            products = response.get('Items', [])
-
-            for product in products:
-                # Convert DynamoDB format to regular dictionary
-                product_dict = {
-                    'name': product['name']['S'],
-                    'display_name': product['display_name']['S'],
-                    'description': product['description']['S'],
-                    'external_link': product['external_link']['S'],
-                    'internal_link': product['internal_link']['S'],
-                    'icon': product['icon']['S']
-                }
-                yield f"data: {json.dumps(product_dict)}\n\n"
-
-            if not products:
-                # If no products in DynamoDB, generate them as before
-                for product in generate_products(limit):
-                    yield f"data: {json.dumps(product)}\n\n"
-
-            yield f"data: {json.dumps({'type': 'stop'})}\n\n"
-        except Exception as e:
-            print(f"Error retrieving products: {str(e)}")
-            yield f"data: {json.dumps({'error': 'Failed to retrieve products'})}\n\n"
-
-    return Response(generate(), mimetype='text/event-stream')
-
-@app.route('/api/products', methods=['POST'])
-def add_product():
-    try:
-        new_product = request.json
-        new_product['name'] = new_product['name'].lower().replace(" ", "-").replace("/", "-").replace("&", "-")
-
-        DYNAMODB_CLIENT.put_item(
-            TableName=PRODUCT_TABLE_NAME,
-            Item={
-                'name': {'S': new_product['name']},
-                'display_name': {'S': new_product['display_name']},
-                'description': {'S': new_product['description']},
-                'external_link': {'S': new_product.get('external_link', '#')},
-                'internal_link': {'S': new_product['internal_link']},
-                'icon': {'S': new_product.get('icon', 'cube')}
-            }
-        )
-        return jsonify({'message': 'Product added successfully'}), 201
-    except Exception as e:
-        print(f"Error adding new product: {str(e)}")
-        return jsonify({'error': 'Failed to add new product'}), 500
-
-def generate_products(limit):
-    print(f"Customer Info: {customer_info}")
-
-    # Step 3: Retrieve documents and extract product information
-    products = []
-    processed_products = set()  # Set to keep track of processed product names
-    product_questions = [f"What are the main products and services offered by {customer_name}?"]
-
-    for question in product_questions:
-        print(f"Question: {question}")
-        if len(products) >= limit:
-            break  # Stop processing if we've reached the limit
-
-        docs = products_retriever.get_relevant_documents(question)
-        
-        for doc in docs:
-            if len(products) >= limit:
-                break  # Stop processing if we've reached the limit
-
-            extraction_prompt = f"""
-            Extract structured product or service information from the following text, focusing on answering: {question}
-            
-            Return the result as a JSON array of objects with the following structure:
-            [
-                {{
-                    "name": "Specific product or service name",
-                    "description": "A brief, clear description of the product or service",
-                    "icon": "An appropriate Font Awesome icon name (without the 'fa-' prefix) that represents this product or service"
-                }}
-            ]
-            If no clear products or services are identified, return an empty array.
-
-            Text: {doc.page_content}
-            """
-
-            if len(products) > 0:
-                extraction_prompt += f"\nHere are the products that have already been extracted. Do not duplicate any of these products: {products}"
-            
-            try:
-                extraction_response = BEDROCK_CLIENT.converse(
-                    modelId=good_model_id,
-                    system=[{"text": system_prompt}],
-                    messages=[{"role": "user", "content": [{"text": extraction_prompt}]}],
-                    inferenceConfig={"maxTokens": 1000, "temperature": 0, "topP": 1},
-                )
-                response_content = extraction_response["output"]["message"]["content"][0]["text"]
-                
-                # Use regex to find the JSON array in the response
-                json_match = re.search(r'\[.*?\]', response_content, re.DOTALL)
-                if json_match:
-                    json_str = json_match.group()
-                    extracted_info = json.loads(json_str)
-                else:
-                    print(f"No JSON array found in the response for question: {question}")
-                    continue
-                
-                for product in extracted_info:
-                    if len(products) >= limit:
-                        break  # Stop processing if we've reached the limit
-
-                    if product.get("name") and product.get("name") != "Unknown Product":
-                        display_name = product["name"]  # Keep the original name as display name
-                        product_name = display_name.lower().strip().replace(" ", "-").replace("/", "-").replace("&", "-")
-                        if product_name not in processed_products:
-                            # Extract link from metadata
-                            metadata_link = doc.metadata.get('location', {}).get('webLocation', {}).get('url')
-                            
-                            # Use metadata link if available, otherwise use extracted link or default to "#"
-                            product["external_link"] = metadata_link or product.get("link") or "#"
-                            product["internal_link"] = f"/product/{product_name}"
-                            # Ensure there's an icon, default to 'cube' if not provided
-                            if not product.get("icon"):
-                                product["icon"] = "cube"
-                            
-                            # Add display_name to the product dictionary
-                            product["display_name"] = display_name
-                            product["name"] = product_name  # This is now the URL-friendly name
-                            
-                            products.append(product)
-                            processed_products.add(product_name)
-                            print(f"Product: {json.dumps(product, indent=2)}")
-                            
-                            # Yield the product immediately
-                            yield product
-                        else:
-                            print(f"Skipping duplicate product: {product_name}")
-            except json.JSONDecodeError as e:
-                print(f"JSON decode error for question '{question}': {str(e)}")
-                print(f"Problematic JSON string: {json_str if 'json_str' in locals() else 'Not available'}")
-            except Exception as e:
-                print(f"Error extracting product information for question '{question}': {str(e)}")
-                print(f"Document content: {doc.page_content}")
-            
-    print(f"Total unique products extracted: {len(products)}")
-
-    # Store the generated products in DynamoDB
-    for product in products:
-        print(f"Storing product in DynamoDB: {product} in {PRODUCT_TABLE_NAME}")
-        try:
-            DYNAMODB_CLIENT.put_item(
-                TableName=PRODUCT_TABLE_NAME,
-                Item={
-                    'name': {'S': product['name']},
-                    'display_name': {'S': product['display_name']},
-                    'description': {'S': product['description']},
-                    'external_link': {'S': product['external_link']},
-                    'internal_link': {'S': product['internal_link']},
-                    'icon': {'S': product['icon']}
-                }
-            )
-        except Exception as e:
-            print(f"Error storing product in DynamoDB: {str(e)}")
-
-@app.route('/api/product-details/<product_name>', methods=['GET'])
-def get_product_details(product_name):
-    print(f"Fetching details for product: {product_name}")
-
-    def generate():
-        try:
-            # Try to get the product from DynamoDB
-            response = DYNAMODB_CLIENT.get_item(
-                TableName=PRODUCT_TABLE_NAME,
-                Key={'name': {'S': product_name}}
-            )
-            item = response.get('Item')
-
-            if item:
-                display_name = item['display_name']['S']
-                product_details = json.loads(item['product_details']['S']) if 'product_details' in item else {}
-
-                if not product_details:
-                    # If product_details is not present or empty, generate details
-                    sections = [
-                        {"type": "overview", "prompt": f"Provide a brief, one paragraph overview of {display_name} as it relates to {customer_name}."},
-                        {"type": "features", "prompt": f"List the key features of the {display_name} product or service that {customer_name} offers."},
-                        {"type": "benefits", "prompt": f"Describe the main benefits of using the {display_name} product or service that {customer_name} offers."},
-                        {"type": "pricing", "prompt": f"Explain the pricing structure or plans for {display_name}, if available."}
-                    ]
-
-                    for section in sections:
-                        docs = products_retriever.get_relevant_documents(f"{display_name} {customer_name} {section['type']}")
-                        context = "\n\n".join([doc.metadata['location']['webLocation']['url'] + "\n\n" + doc.page_content for doc in docs])
-
-                        section_prompt = f"""
-                        Based on the following information about {display_name}, {section['prompt']}
-                        Use markdown formatting for better readability.
-                        If the information is not available in the context, state that it's not available.
-                        
-                        Context: {context}
-
-                        Do not include any framing language such as "According to the context" or "Here is an overview of" in your responses, just get straight to the point!
-                        """
-
-                        yield f"data: {json.dumps({'type': 'section_start', 'section': section['type']})}\n\n"
-
-                        response = BEDROCK_CLIENT.converse_stream(
-                            modelId=good_model_id,
-                            system=[{"text": system_prompt}],
-                            messages=[{"role": "user", "content": [{"text": section_prompt}]}],
-                            inferenceConfig={"maxTokens": 500, "temperature": 0, "topP": 1},
-                        )
-
-                        section_content = ""
-                        for chunk in response["stream"]:
-                            if "contentBlockDelta" in chunk:
-                                text = chunk["contentBlockDelta"]["delta"]["text"]
-                                section_content += text
-                                yield f"data: {json.dumps({'type': 'content', 'section': section['type'], 'content': text})}\n\n"
-
-                        product_details[section['type']] = section_content
-                        yield f"data: {json.dumps({'type': 'section_end', 'section': section['type']})}\n\n"
-
-                    # Update only the product_details field in DynamoDB
-                    try:
-                        DYNAMODB_CLIENT.update_item(
-                            TableName=PRODUCT_TABLE_NAME,
-                            Key={'name': {'S': product_name}},
-                            UpdateExpression="SET product_details = :details",
-                            ExpressionAttributeValues={
-                                ':details': {'S': json.dumps(product_details)}
-                            },
-                            # Add this condition to ensure we don't create a new item if it doesn't exist
-                            ConditionExpression="attribute_exists(#name)",
-                            ExpressionAttributeNames={
-                                "#name": "name"
-                            }
-                        )
-                    except ClientError as e:
-                        if e.response['Error']['Code'] == 'ConditionalCheckFailedException':
-                            print(f"Product {product_name} does not exist in DynamoDB. Cannot update product_details.")
-                        else:
-                            print(f"Error updating product details in DynamoDB: {str(e)}")
-
-                # Yield the product details
-                yield f"data: {json.dumps(product_details)}\n\n"
-                yield f"data: {json.dumps({'type': 'stop'})}\n\n"
-            else:
-                print(f"Product {product_name} not found in DynamoDB.")
-                yield f"data: {json.dumps({'error': 'Product not found'})}\n\n"
-        except ClientError as e:
-            print(f"Error retrieving product from DynamoDB: {str(e)}")
-            yield f"data: {json.dumps({'error': 'Failed to retrieve product details'})}\n\n"
-
-    return Response(generate(), mimetype='text/event-stream')
-
 @app.route('/api/site-items', methods=['GET'])
 def get_site_items():
     prompt = request.args.get('prompt', type=str)
@@ -851,10 +588,21 @@ def generate_site_items(prompt, item_type, limit, generate_images):
                                     "seed": random.randint(0, 2147483647),
                                 },
                             }
-                            response = BEDROCK_CLIENT.invoke_model(
-                                modelId="amazon.titan-image-generator-v2:0",
-                                body=json.dumps(image_request)
-                            )
+                            retries = 0
+                            max_retries = 3
+                            while retries < max_retries:
+                                try:
+                                    response = BEDROCK_CLIENT.invoke_model(
+                                        modelId="amazon.titan-image-generator-v2:0",
+                                        body=json.dumps(image_request)
+                                    )
+                                    break  # If successful, exit the loop
+                                except Exception as e:
+                                    retries += 1
+                                    if retries == max_retries:
+                                        print(f"Failed to invoke model after {max_retries} attempts: {str(e)}")
+                                        raise  # Re-raise the last exception if all retries failed
+                                    print(f"Attempt {retries} failed. Retrying...")
                             response_body = json.loads(response["body"].read())
                             image_base64 = response_body["images"][0]
                             
@@ -978,7 +726,8 @@ def get_catalogs():
             'name': catalog['name']['S'],
             'route': catalog['route']['S'],
             'prompt': catalog['prompt']['S'],
-            'generateImages': catalog['generateImages']['BOOL']
+            'generateImages': catalog['generateImages']['BOOL'],
+            'icon': catalog['icon']['S'] if 'icon' in catalog else None
         } for catalog in catalogs])
     except Exception as e:
         print(f"Error retrieving catalogs: {str(e)}")
@@ -986,8 +735,28 @@ def get_catalogs():
 
 @app.route('/api/catalogs', methods=['POST'])
 def add_catalog():
+    new_catalog = request.json
     try:
-        new_catalog = request.json
+        # Generate an icon using Bedrock fast model
+        icon_prompt = f"""Suggest a FontAwesome icon name (without the 'fa-' prefix) that best represents this concept: 
+        
+        {new_catalog['name']}. 
+        
+        Respond with only the icon name, nothing else."""
+        
+        icon_response = BEDROCK_CLIENT.converse(
+            modelId=fast_model_id,
+            system=[{"text": system_prompt}],
+            messages=[{"role": "user", "content": [{"text": icon_prompt}]}],
+            inferenceConfig={"maxTokens": 1000, "temperature": 0.5, "topP": 1},
+        )
+        
+        icon_name = icon_response["output"]["message"]["content"][0]["text"]
+        
+        # Ensure the icon name is valid (you might want to add more validation)
+        if not icon_name or len(icon_name) > 20:
+            icon_name = "list"  # Default icon if the generated one is invalid
+        
         catalog_id = str(uuid.uuid4())
         DYNAMODB_CLIENT.put_item(
             TableName=CATALOGS_TABLE_NAME,
@@ -996,7 +765,8 @@ def add_catalog():
                 'name': {'S': new_catalog['name']},
                 'route': {'S': new_catalog['route']},
                 'prompt': {'S': new_catalog['prompt']},
-                'generateImages': {'BOOL': new_catalog['generateImages']}
+                'generateImages': {'BOOL': new_catalog['generateImages']},
+                'icon': {'S': icon_name}
             }
         )
         return jsonify({'id': catalog_id, **new_catalog}), 201
@@ -1216,7 +986,7 @@ def get_idea_items():
         )
         
         existing_items = response.get('Items', [])
-        
+        print(f"Existing {len(existing_items)} items")
         if existing_items:
             for dbItem in existing_items[:limit]:
                 item = {
@@ -1229,6 +999,8 @@ def get_idea_items():
                 yield f"data: {json.dumps(item)}\n\n"
             yield f"data: {json.dumps({'type': 'stop'})}\n\n"
             return
+        else:
+            print("No existing items found")
         processed_titles = set()
         item_count = 0
         
@@ -1305,10 +1077,22 @@ def get_idea_items():
                                 "seed": random.randint(0, 2147483647),
                             },
                         }
-                        response = BEDROCK_CLIENT.invoke_model(
-                            modelId="amazon.titan-image-generator-v2:0",
-                            body=json.dumps(image_request)
-                        )
+                        
+                        retries = 0
+                        max_retries = 3
+                        while retries < max_retries:
+                            try:
+                                response = BEDROCK_CLIENT.invoke_model(
+                                    modelId="amazon.titan-image-generator-v2:0",
+                                    body=json.dumps(image_request)
+                                )
+                                break  # If successful, exit the loop
+                            except Exception as e:
+                                retries += 1
+                                if retries == max_retries:
+                                    print(f"Failed to invoke model after {max_retries} attempts: {str(e)}")
+                                    raise  # Re-raise the last exception if all retries failed
+                                print(f"Attempt {retries} failed. Retrying...")
                         response_body = json.loads(response["body"].read())
                         image_base64 = response_body["images"][0]
 
@@ -1362,7 +1146,6 @@ def get_idea_details():
         return jsonify({'error': 'Title and item_type are required'}), 400
 
     def generate():
-        try:
             # Check if details already exist in DynamoDB
             response = DYNAMODB_CLIENT.get_item(
                 TableName=IDEA_ITEMS_TABLE_NAME,
@@ -1374,10 +1157,19 @@ def get_idea_details():
             
             existing_item = response.get('Item')
             if existing_item and 'details' in existing_item:
+                print("Details exist")
                 # If details exist, return them immediately
                 details = json.loads(existing_item['details']['S'])
+                print(f"Details: {details}")
+                yield f"data: {json.dumps({'type': 'press_release_start'})}\n\n"
                 yield f"data: {json.dumps({'type': 'press_release', 'content': details['press_release']})}\n\n"
+                yield f"data: {json.dumps({'type': 'press_release_end'})}\n\n"
+                yield f"data: {json.dumps({'type': 'social_media_start'})}\n\n"
                 yield f"data: {json.dumps({'type': 'social_media', 'content': details['social_media_post']})}\n\n"
+                yield f"data: {json.dumps({'type': 'social_media_end'})}\n\n"
+                yield f"data: {json.dumps({'type': 'customer_reviews_start'})}\n\n"
+                yield f"data: {json.dumps({'type': 'customer_reviews', 'content': details['customer_reviews']})}\n\n"
+                yield f"data: {json.dumps({'type': 'customer_reviews_end'})}\n\n"
                 yield f"data: {json.dumps({'type': 'stop'})}\n\n"
                 return
 
@@ -1412,7 +1204,7 @@ def get_idea_details():
             The product is being offered by {customer_name}. Here is some additional information about the company: {customer_info} 
             Format the social media post using markdown, including appropriate emphasis and line breaks. Use emojis and hashtags where appropriate.
             
-            Do not include any preamble language such as "According to the context" or "Here is an overview of" in your responses, just get straight to the point!
+            Do not include any preamble language such as "Here is an overview of" in your responses, just get straight to the point!
             """
             social_media_response = BEDROCK_CLIENT.converse_stream(
                 modelId=fast_model_id,
@@ -1430,10 +1222,68 @@ def get_idea_details():
                     yield f"data: {json.dumps({'type': 'social_media', 'content': text})}\n\n"
             yield f"data: {json.dumps({'type': 'social_media_end'})}\n\n"
 
+            # Generate Customer Reviews
+            reviews_prompt = f"""
+            Generate 3-4  positive and realistic customer reviews for the following product idea:
+            Company Name: {customer_name}
+            Product Name: {title}
+            Product Description: {description}
+
+            For each review, provide:
+            1. A customer name (first name and last initial)
+            2. A rating (4 or 5) out of 5 stars
+            3. A positive, realistic comment about the product. The comment should be 2-3 sentences and relate to the 
+                product (and possibly the company)in a real-world context.
+            4. Randomly decide if it's a verified purchase (70% chance) or a top reviewer (20% chance)
+
+            Format the response as a JSON array of objects, like so:
+            [
+                {{
+                    "name": "John Doe",
+                    "rating": 5,
+                    "comment": "This product will be a game changer for my business!",
+                    "verified": true/false,
+                    "topReviewer": true/false
+                }}
+            ]
+
+            Ensure the reviews are diverse in opinion.
+
+            Do not include any preamble language such as "According to the context" or "Here is an overview of" in your responses, just get straight to the point!
+            
+            """
+            print(f"Reviews prompt: {reviews_prompt}")
+            
+            # Using fast_model_id for quicker generation
+            reviews_response = BEDROCK_CLIENT.converse(
+                modelId=fast_model_id,
+                system=[{"text": system_prompt}],
+                messages=[{"role": "user", "content": [{"text": reviews_prompt}]}],
+                inferenceConfig={"maxTokens": 1000, "temperature": 0.7, "topP": 1},
+            )
+            yield f"data: {json.dumps({'type': 'customer_reviews_start'})}\n\n"
+            
+            reviews = reviews_response["output"]["message"]["content"][0]["text"]
+            # print(f"Reviews: {reviews}")
+            # parse out the json array from the reviews string that may contain other text
+                # Use regex to find the JSON object in the response
+            json_match = re.search(r'\[.*?\]', reviews, re.DOTALL)
+            if json_match:
+                json_str = json_match.group()
+                print(f"JSON string: {json_str}")
+                reviews_json = json.loads(json_str)
+            else:
+                print("No JSON object found in the response")
+                reviews_json = {}
+
+            yield f"data: {json.dumps({'type': 'customer_reviews', 'content': reviews_json})}\n\n"
+
+            yield f"data: {json.dumps({'type': 'customer_reviews_end'})}\n\n"
             # Save details to DynamoDB
             details = {
                 'press_release': press_release,
-                'social_media_post': social_media_post
+                'social_media_post': social_media_post,
+                'customer_reviews': reviews_json
             }
             # Update only the details field in DynamoDB
             try:
@@ -1451,11 +1301,8 @@ def get_idea_details():
 
             yield f"data: {json.dumps({'type': 'stop'})}\n\n"
 
-        except Exception as e:
-            print(f"Error in /api/idea-details: {str(e)}")
-            yield f"data: {json.dumps({'error': 'Failed to generate idea details'})}\n\n"
-
     return Response(generate(), mimetype='text/event-stream')
+# New endpoint to generate customer reviews
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=os.environ.get('DEBUG', False))

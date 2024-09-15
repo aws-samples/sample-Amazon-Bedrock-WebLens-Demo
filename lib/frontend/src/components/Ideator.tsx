@@ -40,7 +40,7 @@ const Ideator: React.FC<IdeatorProps> = ({ backendUrl, ideaName, initialPrompt, 
   const [ideas, setIdeas] = useState<IdeaCardData[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [itemLimit, setItemLimit] = useState('12');
+  const [itemLimit, setItemLimit] = useState('6');
   const [generateImages, setGenerateImages] = useState(initialGenerateImages);
   const fetchedRef = useRef(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -239,7 +239,7 @@ const Ideator: React.FC<IdeatorProps> = ({ backendUrl, ideaName, initialPrompt, 
   }
 
   return (
-    <Box sx={{ mt: 10 }}>
+    <Box sx={{ mt: 10, mb: 15 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
         <Typography variant="h4" component="div">
           {ideaName}
@@ -375,7 +375,7 @@ const Ideator: React.FC<IdeatorProps> = ({ backendUrl, ideaName, initialPrompt, 
         ))}
 
         {/* Add New Card */}
-        {savedPrompt && (
+        {savedPrompt && loading && (
           <Grid item xs={12} sm={6} md={4}>
             <Card 
               sx={{ 
@@ -390,19 +390,10 @@ const Ideator: React.FC<IdeatorProps> = ({ backendUrl, ideaName, initialPrompt, 
                   transform: 'scale(1.03)',
                 },
               }}
-            >
-              {savedPrompt && loading ? (              
+            >             
                 <CardContent sx={{ flexGrow: 1, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
                   <Spinner />
                 </CardContent>
-              ) : (
-                <CardContent sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                  <AddIcon sx={{ fontSize: 60, color: '#666' }} />
-                  <Typography variant="h6" component="div" sx={{ mt: 2 }}>
-                    Add New Idea
-                  </Typography>
-                </CardContent>
-              )}
             </Card>
           </Grid>
         )}

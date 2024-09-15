@@ -12,6 +12,9 @@ import MenuIcon from '@mui/icons-material/Menu';
 import ChatIcon from '@mui/icons-material/Chat';
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
 import LightbulbIcon from '@mui/icons-material/Lightbulb';
+import CatalogIcon from '@mui/icons-material/Book';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { IconName } from '@fortawesome/fontawesome-svg-core';
 import './App.css';
 
 // Custom hook to fetch config
@@ -48,6 +51,7 @@ interface Catalog {
   route: string;
   prompt: string;
   generateImages: boolean;
+  icon: IconName;
 }
 
 interface ProductIdeator {
@@ -260,9 +264,16 @@ const App: React.FC = () => {
           <ListItemText primary="Products" />
         </ListItem>
         {catalogs.map((catalog, index) => (
+          console.log(catalog),
           <ListItem key={catalog.id} button component={RouterLink} to={catalog.route} className="sidebar-item">
             <ListItemIcon>
-              {['📚', '🎨', '🔧', '🍽️', '🏠'][index % 5]}
+              {catalog.icon ? (
+                <FontAwesomeIcon 
+                  icon={['fas', catalog.icon]}
+                />
+              ) : (
+                <AddIcon />
+              )}
             </ListItemIcon>
             <ListItemText primary={catalog.name} />
           </ListItem>

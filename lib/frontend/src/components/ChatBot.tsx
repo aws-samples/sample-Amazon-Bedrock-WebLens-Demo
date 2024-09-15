@@ -266,7 +266,7 @@ const ChatBot: React.FC<ChatBotProps> = ({ backendUrl, customerName }) => {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <Container maxWidth="md">
-        <Box sx={{ maxheight: '100vh', display: 'flex', flexDirection: 'column', py: 2 }}>
+        <Box sx={{ maxheight: '100vh', display: 'flex', flexDirection: 'column', py: 2, mt: 10 }}>
           <Paper elevation={3} sx={{ flexGrow: 1, mb: 2, overflow: 'auto', p: 2, display: 'flex', flexDirection: 'column' }}>
             <List sx={{ flexGrow: 1 }}>
               {messages.map((message, index) => (
