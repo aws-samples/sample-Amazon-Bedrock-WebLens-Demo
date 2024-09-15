@@ -33,10 +33,16 @@ config = Config(retries={'max_attempts': 10, 'mode': 'adaptive'})
 BEDROCK_CLIENT = boto3.client("bedrock-runtime", 'us-east-1', config=config)
 DYNAMODB_CLIENT = boto3.client('dynamodb', region_name=aws_region)
 
+good_model_id = "anthropic.claude-3-sonnet-20240229-v1:0"
+fast_model_id = "anthropic.claude-3-haiku-20240307-v1:0"
+
 # Get the DynamoDB table name from environment variable
 PRODUCT_TABLE_NAME = os.environ.get('PRODUCT_TABLE_NAME', f"{customer_name}-kb-products")
 SITE_INFO_TABLE_NAME = os.environ.get('SITE_INFO_TABLE_NAME', f"{customer_name}-kb-info")
 CATALOGS_TABLE_NAME = os.environ.get('CATALOGS_TABLE_NAME', f"{customer_name}-kb-catalogs")
+IDEATORS_TABLE_NAME = os.environ.get('IDEATORS_TABLE_NAME', f"{customer_name}-kb-ideators")
+PRODUCT_IDEAS_TABLE_NAME = os.environ.get('PRODUCT_IDEAS_TABLE_NAME', f"{customer_name}-kb-product-ideas")
+IDEA_ITEMS_TABLE_NAME = os.environ.get('IDEA_ITEMS_TABLE_NAME', f"{customer_name}-kb-idea-items")
 
 # Retriever setup
 retriever = AmazonKnowledgeBasesRetriever(
@@ -98,12 +104,12 @@ else:
     customer_info_context = "\n".join([doc.page_content for doc in customer_info_docs])
     
     customer_info_response = BEDROCK_CLIENT.converse(
-        modelId="anthropic.claude-3-haiku-20240307-v1:0",
+        modelId=fast_model_id,
         messages=[{"role": "user", "content": [{"text": f"{customer_info_prompt}\n\nCustomer Context: {customer_info_context}"}]}],
-        inferenceConfig={"maxTokens": 500, "temperature": 0, "topP": 1},
+        inferenceConfig={"maxTokens": 1000, "temperature": 0, "topP": 1},
     )
     customer_info = customer_info_response["output"]["message"]["content"][0]["text"]
-    
+    print(f"Customer Info: {customer_info}")
     response_cache[customer_info_cache_key] = customer_info
 
 chat_suggested_questions_cache_key = f"chat_suggested_questions_{customer_name}"
@@ -120,7 +126,7 @@ else:
     <question>What are {customer_name}'s main products and services?</question>
     """
     chat_suggested_questions = BEDROCK_CLIENT.converse(
-        modelId="anthropic.claude-3-haiku-20240307-v1:0",
+        modelId=fast_model_id,
         messages=[{"role": "user", "content": [{"text": chat_suggested_questions_prompt}]}],
         inferenceConfig={"maxTokens": 500, "temperature": 0, "topP": 1},
     )
@@ -225,7 +231,7 @@ def visualize_products(question):
     print(f"Visualization prompt: {visualization_prompt}")
 
     visualization_response = BEDROCK_CLIENT.converse(
-        modelId="anthropic.claude-3-5-sonnet-20240620-v1:0",
+        modelId=good_model_id,
         system=[{"text": system_prompt}],
         messages=[{"role": "user", "content": [{"text": visualization_prompt}]}],
         inferenceConfig={"maxTokens": 1000, "temperature": 0, "topP": 1},
@@ -266,7 +272,7 @@ def chat():
         question = data['question']
         # Use tool calling to determine which tool to use
         response = BEDROCK_CLIENT.converse(
-            modelId="anthropic.claude-3-5-sonnet-20240620-v1:0",
+            modelId=good_model_id,
             system=[{"text": system_prompt}],
             messages=[
                 {"role": "user", "content": [{"text": f"Question: {question}"}]}
@@ -286,7 +292,7 @@ def chat():
                     rewrite_prompt = condense_question_template.format(chat_history=chat_history_str, question=question_to_answer)
                     try:
                         rewrite_response = BEDROCK_CLIENT.converse(
-                            modelId="anthropic.claude-3-5-sonnet-20240620-v1:0",
+                            modelId=good_model_id,
                             system=[{"text": system_prompt}],
                             messages=[{"role": "user", "content": [{"text": rewrite_prompt}]}],
                             inferenceConfig={"maxTokens": 512, "temperature": 0, "topP": 1},
@@ -325,7 +331,7 @@ def chat():
 
                 # Generate the response
                 response = BEDROCK_CLIENT.converse_stream(
-                    modelId="anthropic.claude-3-5-sonnet-20240620-v1:0",
+                    modelId=good_model_id,
                     system=[{"text": system_prompt}],
                     messages=[{"role": "user", "content": [{"text": prompt}]}],
                     inferenceConfig={
@@ -354,7 +360,7 @@ def chat():
                 rewrite_prompt = condense_question_template.format(chat_history=chat_history_str, question=question_to_answer)
                 try:
                     rewrite_response = BEDROCK_CLIENT.converse(
-                        modelId="anthropic.claude-3-5-sonnet-20240620-v1:0",
+                        modelId=good_model_id,
                         system=[{"text": system_prompt}],
                         messages=[{"role": "user", "content": [{"text": rewrite_prompt}]}],
                         inferenceConfig={"maxTokens": 512, "temperature": 0, "topP": 1},
@@ -393,7 +399,7 @@ def chat():
 
             # Generate the response
             response = BEDROCK_CLIENT.converse_stream(
-                modelId="anthropic.claude-3-5-sonnet-20240620-v1:0",
+                modelId=good_model_id,
                 system=[{"text": system_prompt}],
                 messages=[{"role": "user", "content": [{"text": prompt}]}],
                 inferenceConfig={
@@ -512,7 +518,7 @@ def generate_products(limit):
             
             try:
                 extraction_response = BEDROCK_CLIENT.converse(
-                    modelId="anthropic.claude-3-5-sonnet-20240620-v1:0",
+                    modelId=good_model_id,
                     system=[{"text": system_prompt}],
                     messages=[{"role": "user", "content": [{"text": extraction_prompt}]}],
                     inferenceConfig={"maxTokens": 1000, "temperature": 0, "topP": 1},
@@ -628,7 +634,7 @@ def get_product_details(product_name):
                         yield f"data: {json.dumps({'type': 'section_start', 'section': section['type']})}\n\n"
 
                         response = BEDROCK_CLIENT.converse_stream(
-                            modelId="anthropic.claude-3-5-sonnet-20240620-v1:0",
+                            modelId=good_model_id,
                             system=[{"text": system_prompt}],
                             messages=[{"role": "user", "content": [{"text": section_prompt}]}],
                             inferenceConfig={"maxTokens": 500, "temperature": 0, "topP": 1},
@@ -802,7 +808,7 @@ def generate_site_items(prompt, item_type, limit, generate_images):
         print(f"Extraction prompt: {extraction_prompt}")
         try:
             extraction_response = BEDROCK_CLIENT.converse(
-                modelId="anthropic.claude-3-5-sonnet-20240620-v1:0",
+                modelId=good_model_id,
                 system=[{"text": system_prompt}],
                 messages=[{"role": "user", "content": [{"text": extraction_prompt}]}],
                 inferenceConfig={"maxTokens": 1000, "temperature": 0.5, "topP": 1},
@@ -1051,6 +1057,405 @@ def delete_catalog(catalog_id):
     except Exception as e:
         print(f"Error deleting catalog: {str(e)}")
         return jsonify({'error': 'Failed to delete catalog'}), 500
+
+@app.route('/api/ideators', methods=['POST'])
+def add_ideator():
+    try:
+        new_ideator = request.json
+        ideator_id = str(uuid.uuid4())
+        DYNAMODB_CLIENT.put_item(
+            TableName=IDEATORS_TABLE_NAME,
+            Item={
+                'id': {'S': ideator_id},
+                'name': {'S': new_ideator['name']},
+                'route': {'S': new_ideator['route']},
+                'prompt': {'S': new_ideator['prompt']},
+                'generateImages': {'BOOL': new_ideator['generateImages']}
+            }
+        )
+        return jsonify({'id': ideator_id, **new_ideator}), 201
+    except Exception as e:
+        print(f"Error adding new product ideator: {str(e)}")
+        print(e.with_traceback)
+        print(e.with_context)
+        return jsonify({'error': 'Failed to add new product ideator'}), 500
+
+@app.route('/api/ideators/<ideator_id>', methods=['PUT'])
+def update_ideator(ideator_id):
+    try:
+        updated_ideator = request.json
+        update_expression = []
+        expression_attribute_names = {}
+        expression_attribute_values = {}
+
+        if 'name' in updated_ideator:
+            update_expression.append('#name = :name')
+            expression_attribute_names['#name'] = 'name'
+            expression_attribute_values[':name'] = {'S': updated_ideator['name']}
+
+        if 'route' in updated_ideator:
+            update_expression.append('#route = :route')
+            expression_attribute_names['#route'] = 'route'
+            expression_attribute_values[':route'] = {'S': updated_ideator['route']}
+
+        if 'prompt' in updated_ideator:
+            update_expression.append('#prompt = :prompt')
+            expression_attribute_names['#prompt'] = 'prompt'
+            expression_attribute_values[':prompt'] = {'S': updated_ideator['prompt']}
+
+        if 'generateImages' in updated_ideator:
+            update_expression.append('#generateImages = :generateImages')
+            expression_attribute_names['#generateImages'] = 'generateImages'
+            expression_attribute_values[':generateImages'] = {'BOOL': updated_ideator['generateImages']}
+
+        if update_expression:
+            DYNAMODB_CLIENT.update_item(
+                TableName=IDEATORS_TABLE_NAME,
+                Key={'id': {'S': ideator_id}},
+                UpdateExpression="SET " + ", ".join(update_expression),
+                ExpressionAttributeNames=expression_attribute_names,
+                ExpressionAttributeValues=expression_attribute_values
+            )
+        return jsonify(updated_ideator)
+    except Exception as e:
+        print(f"Error updating ideator: {str(e)}")
+        return jsonify({'error': 'Failed to update ideator'}), 500
+
+@app.route('/api/ideators/<ideator_id>', methods=['DELETE'])
+def delete_ideator(ideator_id):
+    try:
+        DYNAMODB_CLIENT.delete_item(
+            TableName=IDEATORS_TABLE_NAME,
+            Key={'id': {'S': ideator_id}}
+        )
+        return jsonify({'message': 'Ideator deleted successfully'})
+    except Exception as e:
+        print(f"Error deleting ideator: {str(e)}")
+        return jsonify({'error': 'Failed to delete ideator'}), 500
+
+@app.route('/api/ideators/<ideator_id>', methods=['GET'])
+def get_ideator(ideator_id):
+    try:
+        response = DYNAMODB_CLIENT.get_item(
+            TableName=IDEATORS_TABLE_NAME,
+            Key={'id': {'S': ideator_id}}
+        )
+        ideator = response.get('Item')
+        if ideator:
+            return jsonify(ideator)
+        else:
+            return jsonify({'error': 'Ideator not found'}), 404
+    except Exception as e:
+        print(f"Error retrieving ideator: {str(e)}")
+        return jsonify({'error': 'Failed to retrieve ideator'}), 500
+
+@app.route('/api/ideators', methods=['GET'])
+def get_ideators():
+    try:
+        response = DYNAMODB_CLIENT.scan(
+            TableName=IDEATORS_TABLE_NAME
+        )
+        ideators = response.get('Items', [])
+        return jsonify([{
+            'id': ideator['id']['S'],
+            'name': ideator['name']['S'],
+            'route': ideator['route']['S'],
+            'prompt': ideator['prompt']['S'],
+            'generateImages': ideator['generateImages']['BOOL']
+        } for ideator in ideators])
+    except Exception as e:
+        print(f"Error listing ideators: {str(e)}")
+        return jsonify({'error': 'Failed to list ideators'}), 500
+
+@app.route('/api/idea-item/<item_type>/<title>', methods=['GET'])
+def get_idea_item(item_type, title):
+    item_type = item_type.lower().replace(" ", "-")
+    print(f"Getting idea item for {item_type} with title {title}")
+    try:
+        response = DYNAMODB_CLIENT.get_item(
+            TableName=IDEA_ITEMS_TABLE_NAME,
+            Key={'item_type': {'S': item_type}, 'title': {'S': title}}
+        )
+        item = response.get('Item')
+        if item:
+            json_item = {
+                'title': item['title']['S'],
+                'description': item['description']['S'],
+                'icon': item.get('icon', {}).get('S', 'lightbulb'),
+                'image': item.get('image', {}).get('S'),
+                'link': item.get('link', {}).get('S', '')
+            }
+            return jsonify(json_item)
+        else:
+            return jsonify({'error': 'Idea item not found'}), 404
+    except Exception as e:
+        print(f"Error retrieving idea item: {str(e)}")
+        return jsonify({'error': 'Failed to retrieve idea item'}), 500
+
+@app.route('/api/idea-items', methods=['GET'])
+def get_idea_items():
+    prompt = request.args.get('prompt')
+    item_type = request.args.get('item_type')
+    limit = int(request.args.get('limit', 12))
+    generate_images = request.args.get('generate_images', 'false').lower() == 'true'
+
+    if not prompt or not item_type:
+        return jsonify({'error': 'Prompt and item_type are required'}), 400
+
+ 
+            
+        
+    # If no items exist, generate new ones using Bedrock Claude
+    def generate_items():
+       
+        # First, try to fetch existing items from DynamoDB
+        response = DYNAMODB_CLIENT.query(
+            TableName=IDEA_ITEMS_TABLE_NAME,
+            KeyConditionExpression='item_type = :item_type',
+            ExpressionAttributeValues={':item_type': {'S': item_type}}
+        )
+        
+        existing_items = response.get('Items', [])
+        
+        if existing_items:
+            for dbItem in existing_items[:limit]:
+                item = {
+                    'title': dbItem['title']['S'],
+                    'description': dbItem['description']['S'],
+                    'icon': dbItem.get('icon', {}).get('S', 'lightbulb'),
+                    'image': dbItem.get('image', {}).get('S'),
+                    'link': dbItem.get('link', {}).get('S', '')
+                }
+                yield f"data: {json.dumps(item)}\n\n"
+            yield f"data: {json.dumps({'type': 'stop'})}\n\n"
+            return
+        processed_titles = set()
+        item_count = 0
+        
+        system_prompt = """You are an AI assistant tasked with generating product ideas based on a given prompt. 
+        Provide creative and innovative product ideas that align with the prompt."""
+
+        extraction_prompt = f"""Based the <prompt> and <customer_info> below, generate exactly {limit} unique product ideas.
+
+        <prompt>
+        {prompt}
+        </prompt>
+
+        <customer_info>
+        {customer_info}
+        </customer_info>
+
+        For each item, provide:
+        1. A title - The name or key feature of the product idea
+        2. A brief description of the product idea and how it relates to the prompt
+        3. An appropriate Font Awesome icon name (without the 'fa-' prefix)
+        {'''4. A prompt to generate a generic stock image for the item. Be generic. Do not mention company or brand names''' if generate_images else ""}
+
+        Return the result as a JSON array of objects with the following structure:
+        [
+            {{
+                "title": "Product idea title",
+                "description": "Brief description of the product idea",
+                "icon": "font-awesome-icon-name",
+                {'''"image_prompt": "A stock image of..."''' if generate_images else ""}
+            }}
+        ]
+
+        Ensure each idea is unique and creative. If no clear ideas can be generated, return an empty array."""
+
+        print(f"Extraction prompt: {extraction_prompt}")
+        try:
+            extraction_response = BEDROCK_CLIENT.converse(
+                modelId=good_model_id,
+                system=[{"text": system_prompt}],
+                messages=[{"role": "user", "content": [{"text": extraction_prompt}]}],
+                inferenceConfig={"maxTokens": 2000, "temperature": 0.7, "topP": 1},
+            )
+            response_content = extraction_response["output"]["message"]["content"][0]["text"]
+            print(f"Extraction response: {response_content}")
+            json_match = re.search(r'\[.*?\]', response_content, re.DOTALL)
+            if json_match:
+                json_str = json_match.group()
+                extracted_items = json.loads(json_str)
+            else:
+                print(f"No JSON array found in the response")
+                return
+
+            for item in extracted_items:
+                if item_count >= limit:
+                    break
+
+                if item.get("title") and item["title"] not in processed_titles:
+                    processed_titles.add(item["title"])
+                    item_count += 1
+
+                    if generate_images:
+                        # Generate an image for the item (similar to the existing code)
+                        image_prompt = item.get("image_prompt", f"A stock image of {item['title']}")
+                        
+                        image_request = {
+                            "taskType": "TEXT_IMAGE",
+                            "textToImageParams": {"text": image_prompt},
+                            "imageGenerationConfig": {
+                                "numberOfImages": 1,
+                                "quality": "standard",
+                                "cfgScale": 8.0,
+                                "height": 384,
+                                "width": 704,
+                                "seed": random.randint(0, 2147483647),
+                            },
+                        }
+                        response = BEDROCK_CLIENT.invoke_model(
+                            modelId="amazon.titan-image-generator-v2:0",
+                            body=json.dumps(image_request)
+                        )
+                        response_body = json.loads(response["body"].read())
+                        image_base64 = response_body["images"][0]
+
+                        # Compress the image to fit into 400kb
+                        image_data = base64.b64decode(image_base64)
+                        image = Image.open(io.BytesIO(image_data))
+                        quality = 95
+                        while True:
+                            buffer = io.BytesIO()
+                            image.save(buffer, format="JPEG", quality=quality)
+                            if buffer.getbuffer().nbytes <= 400 * 1024 or quality <= 5:
+                                break
+                            quality -= 5
+                        compressed_image_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+                        item['image'] = compressed_image_base64
+
+                    # Store the item in DynamoDB
+                    try:
+                        dynamodb_item = {
+                            'item_type': {'S': item_type},
+                            'title': {'S': item['title']},
+                            'description': {'S': item['description']},
+                            'icon': {'S': item.get('icon', 'lightbulb')},
+                        }
+                        if 'image' in item and item['image']:
+                            dynamodb_item['image'] = {'S': item['image']}
+
+                        DYNAMODB_CLIENT.put_item(
+                            TableName=IDEA_ITEMS_TABLE_NAME,
+                            Item=dynamodb_item
+                        )
+                    except Exception as e:
+                        print(f"Error storing item in DynamoDB: {str(e)}")
+                    print(f"Item stored in DynamoDB: {item}")
+                    yield f"data: {json.dumps(item)}\n\n"
+
+        except Exception as e:
+            print(f"Error generating items: {str(e)}")
+
+    return Response(generate_items(), mimetype='text/event-stream')
+
+# New endpoint to generate press release and social media post
+@app.route('/api/idea-details', methods=['POST'])
+def get_idea_details():
+    data = request.json
+    title = data.get('title')
+    item_type = data.get('item_type')
+    description = data.get('description', '')
+
+    if not title or not item_type:
+        return jsonify({'error': 'Title and item_type are required'}), 400
+
+    def generate():
+        try:
+            # Check if details already exist in DynamoDB
+            response = DYNAMODB_CLIENT.get_item(
+                TableName=IDEA_ITEMS_TABLE_NAME,
+                Key={
+                    'item_type': {'S': item_type.lower()},
+                    'title': {'S': title}
+                }
+            )
+            
+            existing_item = response.get('Item')
+            if existing_item and 'details' in existing_item:
+                # If details exist, return them immediately
+                details = json.loads(existing_item['details']['S'])
+                yield f"data: {json.dumps({'type': 'press_release', 'content': details['press_release']})}\n\n"
+                yield f"data: {json.dumps({'type': 'social_media', 'content': details['social_media_post']})}\n\n"
+                yield f"data: {json.dumps({'type': 'stop'})}\n\n"
+                return
+
+            # Generate Press Release
+            press_release_prompt = f"""Create a press release for the product idea titled "{title}" with description "{description}"
+
+            The product is being offered by {customer_name}. Here is some additional information about the company: {customer_info} 
+            
+            Format the press release using markdown, including appropriate headers, paragraphs, and emphasis where needed.
+            
+            Do not include any framing language such as "According to the context" or "Here is an overview of" in your responses, just get straight to the point!
+             """
+            press_release_response = BEDROCK_CLIENT.converse_stream(
+                modelId=good_model_id,
+                system=[{"text": system_prompt}],
+                messages=[{"role": "user", "content": [{"text": press_release_prompt}]}],
+                inferenceConfig={"maxTokens": 1000, "temperature": 0.7, "topP": 1},
+            )
+
+            press_release = ""
+            yield f"data: {json.dumps({'type': 'press_release_start'})}\n\n"
+            for chunk in press_release_response["stream"]:
+                if "contentBlockDelta" in chunk:
+                    text = chunk["contentBlockDelta"]["delta"]["text"]
+                    press_release += text
+                    yield f"data: {json.dumps({'type': 'press_release', 'content': text})}\n\n"
+            yield f"data: {json.dumps({'type': 'press_release_end'})}\n\n"
+
+            # Generate Social Media Post
+            social_media_prompt = f"""Create a fun and engaging social media post for the product idea titled "{title}" with description "{description}" 
+            
+            The product is being offered by {customer_name}. Here is some additional information about the company: {customer_info} 
+            Format the social media post using markdown, including appropriate emphasis and line breaks. Use emojis and hashtags where appropriate.
+            
+            Do not include any preamble language such as "According to the context" or "Here is an overview of" in your responses, just get straight to the point!
+            """
+            social_media_response = BEDROCK_CLIENT.converse_stream(
+                modelId=fast_model_id,
+                system=[{"text": system_prompt}],
+                messages=[{"role": "user", "content": [{"text": social_media_prompt}]}],
+                inferenceConfig={"maxTokens": 300, "temperature": 0.7, "topP": 1},
+            )
+
+            social_media_post = ""
+            yield f"data: {json.dumps({'type': 'social_media_start'})}\n\n"
+            for chunk in social_media_response["stream"]:
+                if "contentBlockDelta" in chunk:
+                    text = chunk["contentBlockDelta"]["delta"]["text"]
+                    social_media_post += text
+                    yield f"data: {json.dumps({'type': 'social_media', 'content': text})}\n\n"
+            yield f"data: {json.dumps({'type': 'social_media_end'})}\n\n"
+
+            # Save details to DynamoDB
+            details = {
+                'press_release': press_release,
+                'social_media_post': social_media_post
+            }
+            # Update only the details field in DynamoDB
+            try:
+                DYNAMODB_CLIENT.update_item(
+                    TableName=IDEA_ITEMS_TABLE_NAME,
+                    Key={
+                        'item_type': {'S': item_type.lower()},
+                        'title': {'S': title}
+                    },
+                    UpdateExpression='SET details = :details',
+                    ExpressionAttributeValues={':details': {'S': json.dumps(details)}}
+                )
+            except Exception as e:
+                print(f"Error updating details in DynamoDB: {str(e)}")
+
+            yield f"data: {json.dumps({'type': 'stop'})}\n\n"
+
+        except Exception as e:
+            print(f"Error in /api/idea-details: {str(e)}")
+            yield f"data: {json.dumps({'error': 'Failed to generate idea details'})}\n\n"
+
+    return Response(generate(), mimetype='text/event-stream')
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=os.environ.get('DEBUG', False))

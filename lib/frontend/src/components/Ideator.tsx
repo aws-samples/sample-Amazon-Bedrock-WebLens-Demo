@@ -1,30 +1,30 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Typography, Paper, TextField, Button, Box, Grid, Card, CardContent, CardActions, Skeleton, Checkbox, FormControlLabel, CardMedia, IconButton, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle } from '@mui/material';
+import { Typography, Paper, TextField, Button, Box, Grid, Card, CardContent, CardActions, Checkbox, FormControlLabel, CardMedia, IconButton, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle } from '@mui/material';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { library } from '@fortawesome/fontawesome-svg-core';
 import { fas } from '@fortawesome/free-solid-svg-icons';
 import AddIcon from '@mui/icons-material/Add';
 import CircularProgress from '@mui/material/CircularProgress';
 import DeleteIcon from '@mui/icons-material/Delete';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 
 library.add(fas);
 
-interface SiteInfoProps {
+interface IdeatorProps {
   backendUrl: string;
-  siteName: string;
+  ideaName: string;
   initialPrompt: string;
   initialGenerateImages: boolean;
   onPromptSave: (prompt: string, generateImages: boolean) => void;
-  onTabDelete: (tabName: string) => void;
+  onDelete: () => void;
 }
 
-interface CardData {
+interface IdeaCardData {
   title: string;
   description: string;
   icon: string;
   image?: string;
-  link?: string; 
+  link?: string;
 }
 
 const Spinner = () => (
@@ -33,47 +33,44 @@ const Spinner = () => (
   </Box>
 );
 
-const SiteInfo: React.FC<SiteInfoProps> = ({ siteName, initialPrompt, onPromptSave, backendUrl, onTabDelete, initialGenerateImages }) => {
+const Ideator: React.FC<IdeatorProps> = ({ backendUrl, ideaName, initialPrompt, initialGenerateImages, onPromptSave, onDelete }) => {
   const [prompt, setPrompt] = useState(initialPrompt);
   const [savedPrompt, setSavedPrompt] = useState(initialPrompt);
   const [showPromptInput, setShowPromptInput] = useState(!initialPrompt);
-  const [cards, setCards] = useState<CardData[]>([]);
+  const [ideas, setIdeas] = useState<IdeaCardData[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [itemLimit, setItemLimit] = useState('12');
   const [generateImages, setGenerateImages] = useState(initialGenerateImages);
   const fetchedRef = useRef(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [cardToDelete, setCardToDelete] = useState<CardData | null>(null);
-  const [deleteTabDialogOpen, setDeleteTabDialogOpen] = useState(false);
+  const [ideaToDelete, setIdeaToDelete] = useState<IdeaCardData | null>(null);
+  const [deleteIdeatorDialogOpen, setDeleteIdeatorDialogOpen] = useState(false);
   const navigate = useNavigate();
 
-  const itemType = siteName.toLowerCase().replace(/\s+/g, '-');
-
-  // Reset state when siteName or initialPrompt changes
+  const itemType = ideaName.toLowerCase().replace(/\s+/g, '-');
+  fetchedRef.current = false;
   useEffect(() => {
     setPrompt(initialPrompt);
     setSavedPrompt(initialPrompt);
     setShowPromptInput(!initialPrompt);
-    setCards([]);
-    fetchedRef.current = false;
-  }, [siteName, initialPrompt]);
+    setIdeas([]);
+  }, [ideaName, initialPrompt]);
 
-  // Fetch items when savedPrompt or siteName changes
   useEffect(() => {
-    const fetchSiteItems = async () => {
+    const fetchIdeas = async () => {
       if (!savedPrompt || savedPrompt === '') return;
       if (fetchedRef.current) return;
       fetchedRef.current = true;
       
       setLoading(true);
       setError(null);
-      setCards([]); // Reset cards when starting a new fetch
+      setIdeas([]);
       try {
         const promptToUse = savedPrompt || initialPrompt;
-        const response = await fetch(`${backendUrl}/site-items?prompt=${encodeURIComponent(promptToUse)}&item_type=${encodeURIComponent(itemType)}&limit=${itemLimit}&generate_images=${generateImages}`);
+        const response = await fetch(`${backendUrl}/idea-items?prompt=${encodeURIComponent(promptToUse)}&item_type=${encodeURIComponent(itemType)}&limit=${itemLimit}&generate_images=${generateImages}`);
         if (!response.ok) {
-          throw new Error('Failed to fetch site items');
+          throw new Error('Failed to fetch ideas');
         }
         const reader = response.body!.getReader();
         const decoder = new TextDecoder();
@@ -95,7 +92,7 @@ const SiteInfo: React.FC<SiteInfoProps> = ({ siteName, initialPrompt, onPromptSa
                 if (data.type === 'stop') {
                   setLoading(false);
                 } else {
-                  setCards(prevCards => {
+                  setIdeas(prevCards => {
                     if (prevCards.some(card => card.title === data.title)) {
                       return prevCards;
                     }
@@ -114,7 +111,7 @@ const SiteInfo: React.FC<SiteInfoProps> = ({ siteName, initialPrompt, onPromptSa
           try {
             const data = JSON.parse(partialData.slice(6));
             if (data.type !== 'stop') {
-              setCards(prevCards => {
+              setIdeas(prevCards => {
                 if (prevCards.some(card => card.title === data.title)) {
                   return prevCards;
                 }
@@ -128,13 +125,13 @@ const SiteInfo: React.FC<SiteInfoProps> = ({ siteName, initialPrompt, onPromptSa
 
         setLoading(false);
       } catch (err) {
-        console.error('Error fetching site items:', err);
+        console.error('Error fetching ideas:', err);
         setError(err instanceof Error ? err.message : 'An error occurred');
         setLoading(false);
       }
     };
 
-    fetchSiteItems();
+    fetchIdeas();
   }, [savedPrompt, itemLimit, generateImages]);
 
   const handlePromptChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -154,12 +151,12 @@ const SiteInfo: React.FC<SiteInfoProps> = ({ siteName, initialPrompt, onPromptSa
     fetchedRef.current = false;
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (prompt.trim()) {
+      onPromptSave(prompt.trim(), generateImages);
       setSavedPrompt(prompt.trim());
       setPrompt('');
       setShowPromptInput(false);
-      onPromptSave(prompt.trim(), generateImages);
       fetchedRef.current = false;
     }
   };
@@ -170,50 +167,48 @@ const SiteInfo: React.FC<SiteInfoProps> = ({ siteName, initialPrompt, onPromptSa
     }
   };
 
-  const handleDeleteClick = (card: CardData) => {
-    setCardToDelete(card);
+  const handleDeleteClick = (idea: IdeaCardData) => {
+    setIdeaToDelete(idea);
     setDeleteDialogOpen(true);
   };
 
   const handleDeleteConfirm = async () => {
-    if (cardToDelete) {
+    if (ideaToDelete) {
       try {
-        const response = await fetch(`${backendUrl}/site-items`, {
+        const response = await fetch(`${backendUrl}/idea-items`, {
           method: 'DELETE',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
             item_type: itemType,
-            title: cardToDelete.title,
+            title: ideaToDelete.title,
           }),
         });
 
         if (response.ok) {
-          setCards(cards.filter(card => card.title !== cardToDelete.title));
+          setIdeas(prevIdeas => prevIdeas.filter(idea => idea.title !== ideaToDelete.title));
         } else {
-          console.error('Failed to delete item');
+          console.error('Failed to delete idea');
         }
       } catch (error) {
-        console.error('Error deleting item:', error);
+        console.error('Error deleting idea:', error);
       }
     }
     setDeleteDialogOpen(false);
-    setCardToDelete(null);
   };
 
   const handleDeleteCancel = () => {
     setDeleteDialogOpen(false);
-    setCardToDelete(null);
   };
 
-  const handleDeleteTabClick = () => {
-    setDeleteTabDialogOpen(true);
+  const handleDeleteIdeatorClick = () => {
+    setDeleteIdeatorDialogOpen(true);
   };
 
-  const handleDeleteTabConfirm = async () => {
+  const handleDeleteIdeatorConfirm = async () => {
     try {
-      const response = await fetch(`${backendUrl}/site-items`, {
+      const response = await fetch(`${backendUrl}/idea-items`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
@@ -224,19 +219,19 @@ const SiteInfo: React.FC<SiteInfoProps> = ({ siteName, initialPrompt, onPromptSa
       });
 
       if (response.ok) {
-        onTabDelete(siteName);
+        onDelete();
         navigate('/');
       } else {
-        console.error('Failed to delete tab');
+        console.error('Failed to delete ideator');
       }
     } catch (error) {
-      console.error('Error deleting tab:', error);
+      console.error('Error deleting ideator:', error);
     }
-    setDeleteTabDialogOpen(false);
+    setDeleteIdeatorDialogOpen(false);
   };
 
-  const handleDeleteTabCancel = () => {
-    setDeleteTabDialogOpen(false);
+  const handleDeleteIdeatorCancel = () => {
+    setDeleteIdeatorDialogOpen(false);
   };
 
   if (error) {
@@ -247,11 +242,11 @@ const SiteInfo: React.FC<SiteInfoProps> = ({ siteName, initialPrompt, onPromptSa
     <Box sx={{ mt: 10 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
         <Typography variant="h4" component="div">
-          {siteName}
+          {ideaName}
         </Typography>
         <IconButton
           size="small"
-          onClick={handleDeleteTabClick}
+          onClick={handleDeleteIdeatorClick}
           sx={{ ml: 2 }}
         >
           <DeleteIcon />
@@ -308,134 +303,124 @@ const SiteInfo: React.FC<SiteInfoProps> = ({ siteName, initialPrompt, onPromptSa
       )}
 
       <Grid container spacing={2}>
-       
-          {cards.map((card, index) => (
-              <Grid item xs={12} sm={6} md={4} key={index}>
-                <Card 
-                  sx={{ 
-                    backgroundColor: (() => {
-                      const hash = card.title.split('').reduce((acc, char) => {
-                        return char.charCodeAt(0) + ((acc << 5) - acc);
-                      }, 0);
-                      const r = (hash & 0xFF) % 56 + 200;
-                      const g = ((hash >> 8) & 0xFF) % 56 + 200;
-                      const b = ((hash >> 16) & 0xFF) % 56 + 200;
-                      return `rgb(${r}, ${g}, ${b})`;
-                    })(),
-                    height: '100%',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    cursor: 'pointer',
-                    transition: 'all 0.3s ease-in-out',
-                    '&:hover': {
-                      boxShadow: 6,
-                      transform: 'scale(1.03)',
-                    },
-                    position: 'relative',
-                    '&:hover .delete-button': {
-                      opacity: 1,
-                    },
+        {ideas.map((idea, index) => (
+          <Grid item xs={12} sm={6} md={4} key={index}>
+            <Card 
+              sx={{ 
+                backgroundColor: (() => {
+                  const hash = idea.title.split('').reduce((acc, char) => {
+                    return char.charCodeAt(0) + ((acc << 5) - acc);
+                  }, 0);
+                  const r = (hash & 0xFF) % 56 + 200;
+                  const g = ((hash >> 8) & 0xFF) % 56 + 200;
+                  const b = ((hash >> 16) & 0xFF) % 56 + 200;
+                  return `rgb(${r}, ${g}, ${b})`;
+                })(),
+                height: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                cursor: 'pointer',
+                transition: 'all 0.3s ease-in-out',
+                '&:hover': {
+                  boxShadow: 6,
+                  transform: 'scale(1.03)',
+                },
+                position: 'relative',
+                '&:hover .delete-button': {
+                  opacity: 1,
+                },
+              }}
+              onClick={() => navigate(`/ideator/${encodeURIComponent(ideaName)}/idea/${encodeURIComponent(idea.title)}`)}
+            >
+              {idea.image && (
+                <CardMedia
+                  component="img"
+                  height="140"
+                  image={`data:image/png;base64,${idea.image}`}
+                  alt={idea.title}
+                />
+              )}
+              <CardContent sx={{ flexGrow: 1 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
+                  <FontAwesomeIcon icon={['fas', idea.icon as any]} size="2x" style={{ marginRight: '16px' }} />
+                  <Typography variant="h5" component="div">
+                    {idea.title}
+                  </Typography>
+                </Box>
+                <Typography variant="body2" color="text.secondary">
+                  {idea.description}
+                </Typography>
+              </CardContent>
+              <CardActions sx={{ justifyContent: 'flex-start', position: 'relative' }}>
+                <Button size="small" component="a" href={idea.link} target="_blank" rel="noopener noreferrer">Learn More</Button>
+              </CardActions>
+              <CardActions sx={{ justifyContent: 'flex-end', position: 'relative' }}>
+                <IconButton
+                  className="delete-button"
+                  size="medium"
+                  onClick={() => handleDeleteClick(idea)}
+                  sx={{
+                    position: 'absolute',
+                    bottom: 8,
+                    right: 8,
+                    opacity: 0,
+                    transition: 'opacity 0.3s',
                   }}
                 >
-                  {card.image && (
-                    <CardMedia
-                      component="img"
-                      height="140"
-                      image={`data:image/png;base64,${card.image}`}
-                      alt={card.title}
-                      />
-                    )}
-                  <CardContent sx={{ flexGrow: 1 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
-                      <FontAwesomeIcon icon={['fas', card.icon as any]} size="2x" style={{ marginRight: '16px' }} />
-                      <Typography variant="h5" component="div">
-                        {card.title}
-                      </Typography>
-                    </Box>
-
-
-                    <Typography variant="body2" color="text.secondary">
-                      {card.description}
-                    </Typography>
-                  </CardContent>
-                  <CardActions sx={{ justifyContent: 'flex-start', position: 'relative' }}>
-                    <Button size="small" component="a" href={card.link} target="_blank" rel="noopener noreferrer">Learn More</Button>
-                  </CardActions>
-                  <CardActions sx={{ justifyContent: 'flex-end', position: 'relative' }}>
-                    <IconButton
-                      className="delete-button"
-                      size="medium"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteClick(card);
-                      }}
-                      sx={{
-                        position: 'absolute',
-                        bottom: 20,
-                        right: 20,
-                        opacity: 0,
-                        transition: 'opacity 0.3s',
-                      }}
-                    >
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
-                  </CardActions>
-                </Card>
-              </Grid>
-            ))}
+                  <DeleteIcon fontSize="small" />
+                </IconButton>
+              </CardActions>
+            </Card>
+          </Grid>
+        ))}
 
         {/* Add New Card */}
         {savedPrompt && (
-        <Grid item xs={12} sm={6} md={4}>
-          <Card 
-            sx={{ 
-              height: '100%',
-              display: 'flex',
-              flexDirection: 'column',
-              backgroundColor: '#f0f0f0',
-              cursor: 'pointer',
-              transition: 'all 0.3s ease-in-out',
-              '&:hover': {
-                boxShadow: 6,
-                transform: 'scale(1.03)',
-              },
-            }}
-          >
-            {savedPrompt && loading ? (              
-            <CardContent sx={{ flexGrow: 1, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                <Spinner />
-              </CardContent>
+          <Grid item xs={12} sm={6} md={4}>
+            <Card 
+              sx={{ 
+                height: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                backgroundColor: '#f0f0f0',
+                cursor: 'pointer',
+                transition: 'all 0.3s ease-in-out',
+                '&:hover': {
+                  boxShadow: 6,
+                  transform: 'scale(1.03)',
+                },
+              }}
+            >
+              {savedPrompt && loading ? (              
+                <CardContent sx={{ flexGrow: 1, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                  <Spinner />
+                </CardContent>
               ) : (
-            <CardContent sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-              <AddIcon sx={{ fontSize: 60, color: '#666' }} />
-              <Typography variant="h6" component="div" sx={{ mt: 2 }}>
-                Add New Card
-              </Typography>
- 
-            </CardContent>
-            )
-          }
-          </Card>
+                <CardContent sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                  <AddIcon sx={{ fontSize: 60, color: '#666' }} />
+                  <Typography variant="h6" component="div" sx={{ mt: 2 }}>
+                    Add New Idea
+                  </Typography>
+                </CardContent>
+              )}
+            </Card>
           </Grid>
-        )
-      }
-   
+        )}
       </Grid>
 
-      {/* Delete Tab Dialog */}
       <Dialog
-        open={deleteTabDialogOpen}
-        onClose={handleDeleteTabCancel}
+        open={deleteIdeatorDialogOpen}
+        onClose={handleDeleteIdeatorCancel}
       >
-        <DialogTitle>Confirm Tab Deletion</DialogTitle>
+        <DialogTitle>Confirm Ideator Deletion</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            Are you sure you want to delete this entire tab and all its items?
+            Are you sure you want to delete this entire ideator and all its ideas?
           </DialogContentText>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleDeleteTabCancel}>Cancel</Button>
-          <Button onClick={handleDeleteTabConfirm} color="error">Delete</Button>
+          <Button onClick={handleDeleteIdeatorCancel}>Cancel</Button>
+          <Button onClick={handleDeleteIdeatorConfirm} color="error">Delete</Button>
         </DialogActions>
       </Dialog>
 
@@ -446,7 +431,7 @@ const SiteInfo: React.FC<SiteInfoProps> = ({ siteName, initialPrompt, onPromptSa
         <DialogTitle>Confirm Deletion</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            Are you sure you want to delete this item?
+            Are you sure you want to delete this idea?
           </DialogContentText>
         </DialogContent>
         <DialogActions>
@@ -458,4 +443,4 @@ const SiteInfo: React.FC<SiteInfoProps> = ({ siteName, initialPrompt, onPromptSa
   );
 };
 
-export default SiteInfo;
+export default Ideator;

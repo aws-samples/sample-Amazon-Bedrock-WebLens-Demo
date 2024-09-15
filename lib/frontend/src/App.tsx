@@ -1,9 +1,9 @@
 import React, { useState, useEffect, KeyboardEvent } from 'react';
 import { BrowserRouter as Router, Route, Routes, Navigate, useNavigate } from 'react-router-dom';
-import ProductGrid from './components/Products';
-import ProductDetails from './components/ProductDetails';
+import Ideator from './components/Ideator';
 import ChatBot from './components/ChatBot';
 import SiteInfo from './components/SiteInfo';
+import IdeaDetails from './components/IdeaDetails';
 import { Box, Container, AppBar, Toolbar, Typography, Button, 
   IconButton, TextField, List, ListItem, ListItemText, Drawer, Divider, ListItemIcon } from '@mui/material';
 import { Link as RouterLink } from 'react-router-dom';
@@ -11,6 +11,7 @@ import AddIcon from '@mui/icons-material/Add';
 import MenuIcon from '@mui/icons-material/Menu';
 import ChatIcon from '@mui/icons-material/Chat';
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
+import LightbulbIcon from '@mui/icons-material/Lightbulb';
 import './App.css';
 
 // Custom hook to fetch config
@@ -49,21 +50,29 @@ interface Catalog {
   generateImages: boolean;
 }
 
+interface ProductIdeator {
+  id: string;
+  name: string;
+  route: string;
+  prompt: string;
+  generateImages: boolean;
+}
+
 const App: React.FC = () => {
   const { config, loading, error } = useConfig();
   const [catalogs, setCatalogs] = useState<Catalog[]>([]);
+  const [productIdeators, setProductIdeators] = useState<ProductIdeator[]>([]);
   const [isAddingCatalog, setIsAddingCatalog] = useState(false);
+  const [isAddingIdeator, setIsAddingIdeator] = useState(false);
   const [newCatalogName, setNewCatalogName] = useState('');
-  const [drawerOpen, setDrawerOpen] = useState(true);  // Set default to true
+  const [newIdeatorName, setNewIdeatorName] = useState('');
+  const [drawerOpen, setDrawerOpen] = useState(true);
   const navigate = useNavigate();
-
-  // useEffect(() => {
-  //   fetchCatalogs();
-  // }, []);
 
   useEffect(() => {
     if (config && config.backendUrl) {
       fetchCatalogs();
+      fetchProductIdeators();
     }
   }, [config]);
 
@@ -77,6 +86,19 @@ const App: React.FC = () => {
       setCatalogs(data);
     } catch (error) {
       console.error('Error fetching catalogs:', error);
+    }
+  };
+
+  const fetchProductIdeators = async () => {
+    try {
+      const response = await fetch(`${config.backendUrl}/ideators`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch product ideators');
+      }
+      const data = await response.json();
+      setProductIdeators(data);
+    } catch (error) {
+      console.error('Error fetching product ideators:', error);
     }
   };
 
@@ -110,7 +132,37 @@ const App: React.FC = () => {
     }
   };
 
-  const handlePromptSave = async (catalogId: string, prompt: string, generateImages: boolean) => {
+  const handleAddProductIdeator = async (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter' && newIdeatorName.trim()) {
+      const newRoute = `/ideator/${newIdeatorName.toLowerCase().replace(/\s+/g, '-')}`;
+      try {
+        const response = await fetch(`${config.backendUrl}/ideators`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            name: newIdeatorName.trim(),
+            route: newRoute,
+            prompt: '',
+            generateImages: false
+          }),
+        });
+        if (!response.ok) {
+          throw new Error('Failed to add product ideator');
+        }
+        const newIdeator = await response.json();
+        setProductIdeators(prevIdeators => [...prevIdeators, newIdeator]);
+        setNewIdeatorName('');
+        setIsAddingIdeator(false);
+        navigate(newRoute);
+      } catch (error) {
+        console.error('Error adding product ideator:', error);
+      }
+    }
+  };
+
+  const handleCatalogPromptSave = async (catalogId: string, prompt: string, generateImages: boolean) => {
     try {
       const response = await fetch(`${config.backendUrl}/catalogs/${catalogId}`, {
         method: 'PUT',
@@ -145,6 +197,41 @@ const App: React.FC = () => {
     }
   };
 
+  const handleIdeatorPromptSave = async (ideatorId: string, prompt: string, generateImages: boolean) => {
+    try {
+      const response = await fetch(`${config.backendUrl}/ideators/${ideatorId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ prompt, generateImages }),
+      });
+      if (!response.ok) {
+        throw new Error('Failed to update ideator');
+      }
+      const updatedIdeator = await response.json();
+      setProductIdeators(prevIdeators => prevIdeators.map(ideator => 
+        ideator.id === ideatorId ? { ...ideator, prompt, generateImages } : ideator
+      ));
+    } catch (error) {
+      console.error('Error updating ideator:', error);
+    }
+  };
+
+  const handleIdeatorDelete = async (ideatorId: string) => {
+    try {
+      const response = await fetch(`${config.backendUrl}/ideators/${ideatorId}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) {
+        throw new Error('Failed to delete product ideator');
+      }
+      setProductIdeators(prevIdeators => prevIdeators.filter(ideator => ideator.id !== ideatorId));
+    } catch (error) {
+      console.error('Error deleting product ideator:', error);
+    }
+  };
+
   if (loading) return <div>Loading...</div>;
   if (error) return <div>Error loading config: {error.message}</div>;
   if (!config) return <div>Config not available</div>;
@@ -175,7 +262,6 @@ const App: React.FC = () => {
         {catalogs.map((catalog, index) => (
           <ListItem key={catalog.id} button component={RouterLink} to={catalog.route} className="sidebar-item">
             <ListItemIcon>
-              {/* You can replace these with appropriate icons or emojis */}
               {['📚', '🎨', '🔧', '🍽️', '🏠'][index % 5]}
             </ListItemIcon>
             <ListItemText primary={catalog.name} />
@@ -210,15 +296,36 @@ const App: React.FC = () => {
         Product Ideator
       </Typography>
       <List>
+        {productIdeators.map((ideator, index) => (
+          <ListItem key={ideator.id} button component={RouterLink} to={ideator.route} className="sidebar-item">
+            <ListItemIcon>
+              <LightbulbIcon />
+            </ListItemIcon>
+            <ListItemText primary={ideator.name} />
+          </ListItem>
+        ))}
         <ListItem>
-          <Button
-            startIcon={<AddIcon />}
-            onClick={() => {/* TODO: Implement new product idea functionality */}}
-            fullWidth
-            className="new-product-idea-button"
-          >
-            New Product Idea
-          </Button>
+          {isAddingIdeator ? (
+            <TextField
+              size="small"
+              variant="outlined"
+              placeholder="New ideator name"
+              value={newIdeatorName}
+              onChange={(e) => setNewIdeatorName(e.target.value)}
+              onKeyPress={handleAddProductIdeator}
+              fullWidth
+              className="add-ideator-input"
+            />
+          ) : (
+            <Button
+              startIcon={<AddIcon />}
+              onClick={() => setIsAddingIdeator(true)}
+              fullWidth
+              className="new-product-idea-button"
+            >
+              New Product Idea
+            </Button>
+          )}
         </ListItem>
       </List>
     </Box>
@@ -291,7 +398,7 @@ const App: React.FC = () => {
                   siteName="Products"
                   initialPrompt="a list of products and services"
                   initialGenerateImages={true}
-                  onPromptSave={(prompt: string, generateImages: boolean) => handlePromptSave('products', prompt, generateImages)}
+                  onPromptSave={(prompt: string, generateImages: boolean) => handleCatalogPromptSave('products', prompt, generateImages)}
                   onTabDelete={() => {}} // Products tab can't be deleted
                   backendUrl={config.backendUrl}
                 />
@@ -306,13 +413,30 @@ const App: React.FC = () => {
                     siteName={catalog.name} 
                     initialPrompt={catalog.prompt}   
                     initialGenerateImages={catalog.generateImages}
-                    onPromptSave={(prompt: string, generateImages: boolean) => handlePromptSave(catalog.id, prompt, generateImages)}
+                    onPromptSave={(prompt: string, generateImages: boolean) => handleCatalogPromptSave(catalog.id, prompt, generateImages)}
                     onTabDelete={() => handleTabDelete(catalog.id)}
                     backendUrl={config.backendUrl}
                   />
                 } 
               />
             ))}
+            {productIdeators.map((ideator) => (
+              <Route
+                key={ideator.id}
+                path={ideator.route}
+                element={
+                  <Ideator
+                    ideaName={ideator.name}
+                    backendUrl={config.backendUrl}
+                    onDelete={() => handleIdeatorDelete(ideator.id)}
+                    initialPrompt={ideator.prompt}
+                    initialGenerateImages={ideator.generateImages}
+                    onPromptSave={(prompt: string, generateImages: boolean) => handleIdeatorPromptSave(ideator.id, prompt, generateImages)}
+                  />
+                }
+              />
+            ))}
+            <Route path="/ideator/:ideatorName/idea/:ideaTitle" element={<IdeaDetails backendUrl={config.backendUrl} customerName={config.customerName} />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Container>

@@ -180,5 +180,64 @@ export class AppStack extends cdk.Stack {
       'CATALOGS_TABLE_NAME',
       catalogsTable.tableName
     );
+
+    // Create DynamoDB table for kb-ideators
+    const ideatorsTable = new dynamodb.Table(this, 'KbIdeatorsTable', {
+      tableName: `${props.customerName}-kb-ideators`,
+      partitionKey: { name: 'id', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: cdk.RemovalPolicy.DESTROY, // Use with caution in production
+    });
+
+    // Grant read/write permissions to the backend task for the ideators table
+    ideatorsTable.grantReadWriteData(taskRole);
+
+    // Add the table name to the backend service environment variables
+    backendService.taskDefinition.defaultContainer?.addEnvironment(
+      'IDEATORS_TABLE_NAME',
+      ideatorsTable.tableName
+    );
+
+    // Create DynamoDB table for kb-product-ideas
+    const productIdeasTable = new dynamodb.Table(this, 'KbProductIdeasTable', {
+      tableName: `${props.customerName}-kb-product-ideas`,
+      partitionKey: { name: 'id', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: cdk.RemovalPolicy.DESTROY, // Use with caution in production
+    });
+
+    // Grant read/write permissions to the backend task for the product ideas table
+    productIdeasTable.grantReadWriteData(taskRole);
+
+    // Add the table name to the backend service environment variables
+    backendService.taskDefinition.defaultContainer?.addEnvironment(
+      'PRODUCT_IDEAS_TABLE_NAME',
+      productIdeasTable.tableName
+    );  
+
+    // Create DynamoDB table for kb-idea-items
+    const ideaItemsTable = new dynamodb.Table(this, 'KbIdeaItemsTable', {
+      tableName: `${props.customerName}-kb-idea-items`,
+      partitionKey: { name: 'item_type', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'title', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: cdk.RemovalPolicy.DESTROY, // Use with caution in production
+    });
+
+    // Grant read/write permissions to the backend task for the idea items table
+    ideaItemsTable.grantReadWriteData(taskRole);
+
+    // Add the table name to the backend service environment variables
+    backendService.taskDefinition.defaultContainer?.addEnvironment(
+      'IDEA_ITEMS_TABLE_NAME',
+      ideaItemsTable.tableName
+    );
+
+    
+    
+    
+    
   }
+
+  
 }
