@@ -17,7 +17,7 @@ This tailored approach not only personalizes the experience but also highlights 
    <details open>
     <summary>Screenshot</summary>
 
-     ![alt text](chat.png)
+     ![alt text](chat_demo.gif)
    </details>
 
 - **Site Catalogs**
@@ -41,7 +41,7 @@ This tailored approach not only personalizes the experience but also highlights 
      <summary>Screenshot</summary>
      
      ![alt text](ideator.png)
-     ![alt text](idea.png)
+     ![alt text](idea_demo.gif)
    </details>
 
 __Note: You must have access to a Bedrock enabled account to use this demo. You can also use the OpenAI API instead of Bedrock, but it's not advisable to demo in this way to customers.__
