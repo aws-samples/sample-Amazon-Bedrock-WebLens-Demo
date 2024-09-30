@@ -13,7 +13,7 @@ import base64
 import random
 import io
 from PIL import Image
-
+from datetime import datetime
 # Check if any of the required environment variables are missing
 required_env_vars = ["AWS_REGION", "CUSTOMER_NAME", "KNOWLEDGE_BASE_ID"]
 if any(env_var not in os.environ for env_var in required_env_vars):
@@ -1179,6 +1179,8 @@ def get_idea_details():
             The product is being offered by {customer_name}. Here is some additional information about the company: {customer_info} 
             
             Format the press release using markdown, including appropriate headers, paragraphs, and emphasis where needed.
+
+            The current date is {datetime.now().strftime("%B %d, %Y")}.
             
             Do not include any framing language such as "According to the context" or "Here is an overview of" in your responses, just get straight to the point!
              """

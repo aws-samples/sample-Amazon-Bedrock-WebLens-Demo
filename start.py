@@ -9,6 +9,11 @@ import threading
 import time
 import base64
 
+def check_customers_dir():
+    if not os.path.exists('customers'):
+        print("📂 Creating customers directory...")
+        os.makedirs('customers')
+
 def npm_install():
     subprocess.run(["npm", "install"], check=True)
 
@@ -192,7 +197,7 @@ def check_bedrock_models():
 
     print("🔍 Checking for required Bedrock models...")
     required_models = [
-        "anthropic.claude-3-5-sonnet-20240620-v1:0",
+        "anthropic.claude-3-sonnet-20240229-v1:0",
         "anthropic.claude-3-haiku-20240307-v1:0",
         "amazon.titan-image-generator-v2:0"
     ]
@@ -324,6 +329,7 @@ def run_local():
 
 def main():
     print("🔍 Checking for required dependencies...")
+    check_customers_dir()
     check_cdk_cli()
     check_docker()
     check_ecr_login()

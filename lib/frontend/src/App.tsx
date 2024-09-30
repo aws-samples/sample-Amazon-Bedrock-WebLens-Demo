@@ -356,7 +356,7 @@ const App: React.FC = () => {
             <MenuIcon />
           </IconButton>
           <Typography variant="h6" noWrap component="div">
-            {config.customerName} Assistant
+            AWS Bedrock WebInsights for {config.customerName} 
           </Typography>
         </Toolbar>
       </AppBar>
