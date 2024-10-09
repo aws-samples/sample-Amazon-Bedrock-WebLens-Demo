@@ -1,8 +1,10 @@
+🆕 New: See the demo for yourself. Live demo link: https://d1ly1sce1no66z.cloudfront.net/
+
 # AWS Bedrock WebInsights Demo
 ## About
 The AWS Bedrock WebInsights demo is designed to introduce customers to the capabilities of Amazon Bedrock suite of services, including Bedrock Knowledge Bases and frontier models like Claude 3.
 
- The demo can be customized to each customer and their industry, and consists of three main components: a Conversational AI Chat Demo, an Automated Product Catalog Generator and a Product Ideator.
+The demo can be customized to each customer and their industry, and consists of three main components: a Conversational AI Chat Demo, an Automated Product Catalog Generator and a Product Ideator.
 
 Each part serves a distinct purpose, demonstrating practical applications of GenAI by utilizing real data from the customer's public-facing website. Deployed as an easily manageable CDK project, the demo experience emphasizes the real-world potential of GenAI in a way that resonates with the specific needs and context of the customer.
 
