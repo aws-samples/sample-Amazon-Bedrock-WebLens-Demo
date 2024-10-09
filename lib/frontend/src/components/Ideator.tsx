@@ -208,7 +208,7 @@ const Ideator: React.FC<IdeatorProps> = ({ backendUrl, ideaName, initialPrompt, 
 
   const handleDeleteIdeatorConfirm = async () => {
     try {
-      const response = await fetch(`${backendUrl}/idea-items`, {
+      const response = await fetch(`${backendUrl}/ideators/${encodeURIComponent(ideaName)}`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
