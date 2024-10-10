@@ -17,12 +17,15 @@ import {
   AccordionSummary,
   AccordionDetails,
   Collapse,
+  Alert,
 } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import LinkIcon from '@mui/icons-material/Link';
 import AttachFileIcon from '@mui/icons-material/AttachFile';
+import CloseIcon from '@mui/icons-material/Close';
+import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
 
 interface Message {
   text: string;
@@ -76,6 +79,7 @@ const ChatBot: React.FC<ChatBotProps> = ({ backendUrl, customerName }) => {
   const messagesEndRef = useRef<null | HTMLDivElement>(null);
   const [expandedLinks, setExpandedLinks] = useState<number | null>(null);
   const [uploadedDocument, setUploadedDocument] = useState<UploadedDocument | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   
   useEffect(() => {
@@ -124,6 +128,10 @@ const ChatBot: React.FC<ChatBotProps> = ({ backendUrl, customerName }) => {
     reader.readAsArrayBuffer(file);
   };
 
+  const handleRemoveUploadedDocument = () => {
+    setUploadedDocument(null);
+  };
+
   const handleSubmit = async (e: React.FormEvent, questionOverride?: string) => {
     e.preventDefault();
     const questionToSend = questionOverride || input;
@@ -133,6 +141,7 @@ const ChatBot: React.FC<ChatBotProps> = ({ backendUrl, customerName }) => {
     setMessages(prev => [...prev, userMessage]);
     setInput('');
     setIsLoading(true);
+    setError(null); // Clear any previous errors
 
     try {
       setSuggestedQuestions([]);
@@ -150,6 +159,11 @@ const ChatBot: React.FC<ChatBotProps> = ({ backendUrl, customerName }) => {
         method: 'POST',
         body: formData,
       });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText);
+      }
 
       const reader = response.body!.getReader();
       const decoder = new TextDecoder();
@@ -187,12 +201,34 @@ const ChatBot: React.FC<ChatBotProps> = ({ backendUrl, customerName }) => {
               });
             } catch (error) {
               console.error('Error parsing SSE data:', error);
+              setError('An error occurred while processing the response.');
+            }
+          }
+          if (line.startsWith('error: ')) {
+            const errorData = JSON.parse(line.slice(7));
+            if (errorData.content) {
+              if (errorData.content.includes('An error occurred (validationException) when calling the ConverseStream operation:')) {
+                setError(errorData.content.split("An error occurred (validationException) when calling the ConverseStream operation:")[1]);
+              } else {
+                setError(errorData.content);
+              }
+            } else {
+              setError('An error occurred while processing the response.');
             }
           }
         }
       }
     } catch (error) {
       console.error('Error fetching response:', error);
+      let errorMessage = 'An error occurred while processing your request.';
+      if (error instanceof Error) {
+        if (error.message.includes('Input is too long for requested model')) {
+          errorMessage = 'The uploaded document is too large. Please try a smaller file.';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -317,6 +353,7 @@ const ChatBot: React.FC<ChatBotProps> = ({ backendUrl, customerName }) => {
       <CssBaseline />
       <Container maxWidth="md">
         <Box sx={{ maxheight: '100vh', display: 'flex', flexDirection: 'column', py: 2, mt: 10 }}>
+          
           <Paper elevation={3} sx={{ flexGrow: 1, mb: 2, overflow: 'auto', p: 2, display: 'flex', flexDirection: 'column' }}>
             <List sx={{ flexGrow: 1 }}>
               {messages.map((message, index) => (
@@ -399,31 +436,68 @@ const ChatBot: React.FC<ChatBotProps> = ({ backendUrl, customerName }) => {
               fullWidth
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Ask a question!"
+              placeholder={uploadedDocument ? "Ask a question about this file!" : `Ask a question about ${customerName}!`}
               disabled={isLoading}
               InputProps={{
-                startAdornment: (
-                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    <input
-                      accept=".pdf,.html,.docx,.doc,.md,.txt"
-                      style={{ display: 'none' }}
-                      id="file-upload"
-                      type="file"
-                      onChange={handleFileUpload}
+                startAdornment: uploadedDocument ? (
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      bgcolor: 'rgba(0, 0, 0, 0.08)',
+                      p: 0.5,
+                      borderRadius: 1,
+                      mr: 1,
+                      width: 40,
+                      height: 40,
+                      position: 'relative',
+                    }}
+                  >
+                    <InsertDriveFileIcon sx={{ fontSize: 20 }} />
+                    <Typography variant="caption" noWrap sx={{ maxWidth: 36, fontSize: '0.6rem' }}>
+                      {uploadedDocument.name}
+                    </Typography>
+                    <CloseIcon
+                      sx={{
+                        position: 'absolute',
+                        top: -8,
+                        right: -8,
+                        fontSize: 16,
+                        cursor: 'pointer',
+                        bgcolor: 'background.paper',
+                        borderRadius: '50%',
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleRemoveUploadedDocument();
+                      }}
                     />
-                    <label htmlFor="file-upload">
-                      <Button
-                        component="span"
-                        disabled={isLoading}
-                        sx={{ minWidth: 'auto', p: '6px' }}
-                      >
-                        <AttachFileIcon />
-                      </Button>
-                    </label>
                   </Box>
+                ) : (
+                  <Box>
+                  <input
+                  accept=".pdf,.html,.docx,.doc,.md,.txt"
+                  style={{ display: 'none' }}
+                  id="file-upload"
+                  type="file"
+                  onChange={handleFileUpload}
+                />
+                <label htmlFor="file-upload">
+                  <Button
+                    component="span"
+                    disabled={isLoading || !!uploadedDocument}
+                    sx={{ minWidth: 'auto', p: '6px' }}
+                  >
+                    <AttachFileIcon />
+                  </Button>
+                </label>
+                </Box>
                 ),
                 endAdornment: (
                   <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              
                     <Button
                       type="submit"
                       disabled={isLoading}
@@ -434,15 +508,14 @@ const ChatBot: React.FC<ChatBotProps> = ({ backendUrl, customerName }) => {
                   </Box>
                 ),
               }}
-              
             />
           </Box>
-          {uploadedDocument && (
-            <Typography variant="caption" sx={{ mt: 1 }}>
-              Uploaded: {uploadedDocument.name}
-            </Typography>
-          )}
         </Box>
+        {error && (
+            <Alert severity="error" onClose={() => setError(null)} sx={{ mb: 2 }}>
+              {error}
+            </Alert>
+          )}
         <Accordion sx={{ mt: 2 }}>
             <AccordionSummary
               expandIcon={<ExpandMoreIcon />}

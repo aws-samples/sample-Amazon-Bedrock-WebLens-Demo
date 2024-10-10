@@ -279,6 +279,7 @@ def chat():
         doc_content = uploaded_file.read()
 
     def generate():
+        answer = ""
         try:
             if doc_content is not None:
                 # Handle uploaded document
@@ -310,6 +311,7 @@ def chat():
                 for chunk in response["stream"]:
                     if "contentBlockDelta" in chunk:
                         text = chunk["contentBlockDelta"]["delta"]["text"]
+                        answer += text
                         yield f"data: {json.dumps({'type': 'content', 'content': text})}\n\n"
                 
                 
@@ -361,7 +363,7 @@ def chat():
                     }
                 )
 
-                answer = ""
+                
                 for chunk in response["stream"]:
                     if "contentBlockDelta" in chunk:
                         text = chunk["contentBlockDelta"]["delta"]["text"]
@@ -376,6 +378,9 @@ def chat():
             Conversation History:
             {chat_history}
 
+            Last Question:
+            {question}
+
             Last Answer:
             {answer}
 
@@ -386,6 +391,8 @@ def chat():
 
             Provide only the JSON array, without any additional text or explanation.
             """
+
+            print(f"Suggested questions prompt: {suggested_questions_prompt}")
 
             suggested_questions_response = BEDROCK_CLIENT.converse(
                 modelId=fast_model_id,
@@ -400,11 +407,12 @@ def chat():
             yield f"data: {json.dumps({'type': 'suggested_questions', 'content': suggested_questions_list})}\n\n"
 
         except Exception as e:
-            print(f"Error in chat generation: {str(e)}")
+            error_message = str(e)
+            print(f"Error in chat generation: {error_message}")
             import traceback
             print("Error details:")
             print(traceback.format_exc())
-            yield f"data: {json.dumps({'error': 'An error occurred while processing your request.'})}\n\n"
+            yield f"error: {json.dumps({'content': error_message})}\n\n"
 
     return Response(generate(), mimetype='text/event-stream')
 

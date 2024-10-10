@@ -345,10 +345,8 @@ const App: React.FC = () => {
 
   return (
     <Box sx={{ display: 'flex', height: '100vh' }}>
-      <AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}>
-        
-        <Toolbar>
-        
+      <AppBar position="fixed" className="app-bar" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}>
+        <Toolbar className="toolbar">
           <IconButton
             color="inherit"
             aria-label="toggle drawer"
@@ -358,9 +356,14 @@ const App: React.FC = () => {
           >
             <MenuIcon />
           </IconButton>
-          <FontAwesomeIcon icon={faMagnifyingGlass} />
-          <Typography variant="h6" noWrap component="div" ml={2}>
-              Amazon Bedrock WebLens for {config.customerName} 
+          <Box className="logo-container" mr={1}>
+            <img src="./mag_logo_white.png" alt="Magnifying Glass Logo" style={{ width: '30px', height: '30px', marginRight: '10px' }} />
+            <Typography variant="h5" noWrap className="logo-typography">
+              Bedrock WebLens
+            </Typography>
+          </Box>
+          <Typography variant="h5" className="customer-name">
+            for {config.customerName}
           </Typography>
         </Toolbar>
       </AppBar>
