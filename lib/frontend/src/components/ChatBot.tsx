@@ -16,10 +16,12 @@ import {
   Accordion,
   AccordionSummary,
   AccordionDetails,
+  Collapse,
 } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import LinkIcon from '@mui/icons-material/Link';
 
 interface Message {
   text: string;
@@ -63,22 +65,27 @@ const ChatBot: React.FC<ChatBotProps> = ({ backendUrl, customerName }) => {
   const [showPromptModifier, setShowPromptModifier] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([]);
+  const [initialSuggestedQuestions, setInitialSuggestedQuestions] = useState<string[]>([]);
   const messagesEndRef = useRef<null | HTMLDivElement>(null);
+  const [expandedLinks, setExpandedLinks] = useState<number | null>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
   useEffect(() => {
-    fetchSuggestedQuestions();
-  }, [backendUrl]);
+    if (messages.length <= 1) {
+      fetchInitialSuggestedQuestions();
+    }
+  }, [backendUrl, messages.length]);
 
-  const fetchSuggestedQuestions = async () => {
+  const fetchInitialSuggestedQuestions = async () => {
     try {
       const response = await fetch(`${backendUrl}/chat-suggested-questions`);
       const data = await response.json();
       
-      setSuggestedQuestions(data);
+      setInitialSuggestedQuestions(data);
+      setSuggestedQuestions(data); // Set initial questions
     } catch (error) {
       console.error('Error fetching suggested questions:', error);
     }
@@ -95,6 +102,7 @@ const ChatBot: React.FC<ChatBotProps> = ({ backendUrl, customerName }) => {
     setIsLoading(true);
 
     try {
+      setSuggestedQuestions([]);
       const response = await fetch(`${backendUrl}/chat`, {
         method: 'POST',
         headers: {
@@ -127,6 +135,8 @@ const ChatBot: React.FC<ChatBotProps> = ({ backendUrl, customerName }) => {
                 botMessage.text += data.content;
               } else if (data.type === 'visualization') {
                 botMessage.visualization = data.content;
+              } else if (data.type === 'suggested_questions') {
+                setSuggestedQuestions(data.content);
               } else if (data.type === 'stop') {
                 console.log('Response complete');
               }
@@ -262,6 +272,10 @@ const ChatBot: React.FC<ChatBotProps> = ({ backendUrl, customerName }) => {
     renderVisualization(visualization)
   );
 
+  const toggleLinks = (index: number) => {
+    setExpandedLinks(expandedLinks === index ? null : index);
+  };
+
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
@@ -276,29 +290,55 @@ const ChatBot: React.FC<ChatBotProps> = ({ backendUrl, customerName }) => {
                     sx={{ 
                       p: 2, 
                       maxWidth: '70%', 
-                      bgcolor: message.isUser ? '#e6f2ff' : '#fff0f5', // Softer pastel colors
-                      color: message.isUser ? '#333' : '#333', // Darker text for better readability
-                      borderRadius: '12px', // Rounded corners
-                      boxShadow: '0 1px 2px rgba(0,0,0,0.1)', // Subtle shadow
+                      bgcolor: message.isUser ? '#e6f2ff' : '#fff0f5',
+                      color: message.isUser ? '#333' : '#333',
+                      borderRadius: '12px',
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
                     }}
                   >
                     {renderMessageText(message.text)}
                     {message.visualization && <MemoizedVisualization visualization={message.visualization} />}
+                    {message.sources && (
+                      <Box sx={{ mt: 2 }}>
+                        <Button
+                          startIcon={<LinkIcon />}
+                          onClick={() => toggleLinks(index)}
+                          size="small"
+                          sx={{ 
+                            textTransform: 'none',
+                            color: '#666',
+                            '&:hover': {
+                              backgroundColor: 'rgba(0, 0, 0, 0.04)',
+                            },
+                          }}
+                        >
+                          {expandedLinks === index ? 'Hide' : 'Show'} helpful links
+                        </Button>
+                        <Collapse in={expandedLinks === index}>
+                          <List dense>
+                            {message.sources.map((source, idx) => (
+                              <ListItem key={idx} disablePadding>
+                                <Link 
+                                  href={source} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer" 
+                                  sx={{ 
+                                    color: '#1976d2',
+                                    fontSize: '0.875rem',
+                                    '&:hover': {
+                                      textDecoration: 'underline',
+                                    },
+                                  }}
+                                >
+                                  {source}
+                                </Link>
+                              </ListItem>
+                            ))}
+                          </List>
+                        </Collapse>
+                      </Box>
+                    )}
                   </Paper>
-                  {message.sources && (
-                    <Box sx={{ mt: 1, alignSelf: 'flex-start' }}>
-                      <Typography variant="caption" sx={{ color: '#666' }}>Helpful links:</Typography>
-                      <List dense>
-                        {message.sources.map((source, idx) => (
-                          <ListItem key={idx} disablePadding>
-                            <Link href={source} target="_blank" rel="noopener noreferrer" sx={{ color: '#1976d2' }}>
-                              <Typography variant="caption">{source}</Typography>
-                            </Link>
-                          </ListItem>
-                        ))}
-                      </List>
-                    </Box>
-                  )}
                 </ListItem>
               ))}
             </List>

@@ -340,9 +340,11 @@ def chat():
                     }
                 )
 
+                response_content = ""
                 for chunk in response["stream"]:
                     if "contentBlockDelta" in chunk:
                         text = chunk["contentBlockDelta"]["delta"]["text"]
+                        response_content += text
                         yield f"data: {json.dumps({'type': 'content', 'content': text})}\n\n"
             elif tool_call["name"] == "visualize_products":
                 question = tool_call["input"]["question"]
@@ -408,15 +410,43 @@ def chat():
                 }
             )
 
+            response_content = ""
             for chunk in response["stream"]:
                 if "contentBlockDelta" in chunk:
                     text = chunk["contentBlockDelta"]["delta"]["text"]
+                    response_content += text
                     yield f"data: {json.dumps({'type': 'content', 'content': text})}\n\n"
         
-            
-            
-
         yield f"data: {json.dumps({'type': 'stop'})}\n\n"
+
+        # Generate new suggested questions
+        suggested_questions_prompt = f"""Based on the following conversation history and the last answer:
+
+        Conversation History:
+        {chat_history}
+
+        Last Answer:
+        {response_content}
+
+        Generate 3-5 relevant follow-up questions that the user might want to ask next. These questions should be diverse and explore different aspects related to the conversation.
+
+        Format your response as a JSON array of strings, like this:
+        ["Question 1?", "Question 2?", "Question 3?"]
+
+        Provide only the JSON array, without any additional text or explanation.
+        """
+
+        suggested_questions_response = BEDROCK_CLIENT.converse(
+            modelId=fast_model_id,
+            system=[{"text": system_prompt}],
+            messages=[{"role": "user", "content": [{"text": suggested_questions_prompt}]}],
+            inferenceConfig={"maxTokens": 500, "temperature": 0.7, "topP": 1},
+        )
+
+        suggested_questions_text = suggested_questions_response["output"]["message"]["content"][0]["text"]
+        suggested_questions_list = json.loads(suggested_questions_text)
+
+        yield f"data: {json.dumps({'type': 'suggested_questions', 'content': suggested_questions_list})}\n\n"
 
     return Response(generate(), mimetype='text/event-stream')
 

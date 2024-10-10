@@ -1,7 +1,7 @@
 
 
 # AWS Bedrock WebInsights Demo
->🆕 New: See the demo for yourself. Live demo link: https://d1ly1sce1no66z.cloudfront.net/
+>🆕 See the demo for yourself. Live demo link: https://d1ly1sce1no66z.cloudfront.net/
 
 The AWS Bedrock WebInsights demo is designed to introduce customers to the capabilities of Amazon Bedrock suite of services, including Bedrock Knowledge Bases and frontier models like Anthropic's _Claude 3_ and _Amazon Titan Image Generator v2_.
 
@@ -14,6 +14,7 @@ Each part serves a distinct purpose, demonstrating practical applications of Gen
   - A modern-looking chatbot written in ReactJS that understands and responds to queries about the website.
   - Real-time streaming responses using the _BedrockConverseStream_ API and _Anthropic Claude 3_.
   - Seamless integration with the frontend for an engaging user experience.
+  - Follow-up question generation using Claude 3 Haiku.
 
 <details open>
    <summary>Screenshot</summary>
