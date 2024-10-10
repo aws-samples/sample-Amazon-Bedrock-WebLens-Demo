@@ -16,6 +16,7 @@ import CatalogIcon from '@mui/icons-material/Book';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { IconName } from '@fortawesome/fontawesome-svg-core';
 import './App.css';
+import { faGlasses, faMagnifyingGlass } from '@fortawesome/free-solid-svg-icons';
 
 // Custom hook to fetch config
 const useConfig = () => {
@@ -345,7 +346,9 @@ const App: React.FC = () => {
   return (
     <Box sx={{ display: 'flex', height: '100vh' }}>
       <AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}>
+        
         <Toolbar>
+        
           <IconButton
             color="inherit"
             aria-label="toggle drawer"
@@ -355,8 +358,9 @@ const App: React.FC = () => {
           >
             <MenuIcon />
           </IconButton>
-          <Typography variant="h6" noWrap component="div">
-            AWS Bedrock WebInsights for {config.customerName} 
+          <FontAwesomeIcon icon={faMagnifyingGlass} />
+          <Typography variant="h6" noWrap component="div" ml={2}>
+              Amazon Bedrock WebLens for {config.customerName} 
           </Typography>
         </Toolbar>
       </AppBar>

@@ -22,6 +22,7 @@ import SendIcon from '@mui/icons-material/Send';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import LinkIcon from '@mui/icons-material/Link';
+import AttachFileIcon from '@mui/icons-material/AttachFile';
 
 interface Message {
   text: string;
@@ -40,6 +41,12 @@ interface VisualizationData {
   title: string;
   description: string;
   data: any[];
+}
+
+interface UploadedDocument {
+  name: string;
+  format: string;
+  bytes: ArrayBuffer;
 }
 
 const theme = createTheme({
@@ -68,7 +75,9 @@ const ChatBot: React.FC<ChatBotProps> = ({ backendUrl, customerName }) => {
   const [initialSuggestedQuestions, setInitialSuggestedQuestions] = useState<string[]>([]);
   const messagesEndRef = useRef<null | HTMLDivElement>(null);
   const [expandedLinks, setExpandedLinks] = useState<number | null>(null);
+  const [uploadedDocument, setUploadedDocument] = useState<UploadedDocument | null>(null);
 
+  
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
@@ -91,6 +100,30 @@ const ChatBot: React.FC<ChatBotProps> = ({ backendUrl, customerName }) => {
     }
   };
 
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const allowedFormats = ['pdf', 'html', 'docx', 'doc', 'md', 'txt'];
+    const fileExtension = file.name.split('.').pop()?.toLowerCase();
+
+    if (!fileExtension || !allowedFormats.includes(fileExtension)) {
+      alert('Unsupported file type. Please upload a PDF, HTML, Word, Markdown, or Text file.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const bytes = e.target?.result as ArrayBuffer;
+      setUploadedDocument({
+        name: file.name,
+        format: fileExtension,
+        bytes: bytes,
+      });
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
   const handleSubmit = async (e: React.FormEvent, questionOverride?: string) => {
     e.preventDefault();
     const questionToSend = questionOverride || input;
@@ -103,16 +136,19 @@ const ChatBot: React.FC<ChatBotProps> = ({ backendUrl, customerName }) => {
 
     try {
       setSuggestedQuestions([]);
+      const formData = new FormData();
+      formData.append('question', questionToSend);
+      formData.append('chat_history', JSON.stringify(messages.map(m => m.text)));
+      formData.append('prompt_modifier', promptModifier);
+      
+      if (uploadedDocument) {
+        formData.append('document', new Blob([uploadedDocument.bytes]), uploadedDocument.name);
+        formData.append('document_format', uploadedDocument.format);
+      }
+
       const response = await fetch(`${backendUrl}/chat`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          question: questionToSend,
-          chat_history: messages.map(m => m.text),
-          prompt_modifier: promptModifier
-        }),
+        body: formData,
       });
 
       const reader = response.body!.getReader();
@@ -358,18 +394,54 @@ const ChatBot: React.FC<ChatBotProps> = ({ backendUrl, customerName }) => {
               </Box>
             )}
           </Paper>
-          <Box component="form" onSubmit={handleSubmit} sx={{ display: 'flex', gap: 1 }}>
+          <Box component="form" onSubmit={handleSubmit} sx={{ display: 'flex', alignItems: 'center', mt: 2 }}>
             <TextField
               fullWidth
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="Ask a question!"
               disabled={isLoading}
+              InputProps={{
+                startAdornment: (
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <input
+                      accept=".pdf,.html,.docx,.doc,.md,.txt"
+                      style={{ display: 'none' }}
+                      id="file-upload"
+                      type="file"
+                      onChange={handleFileUpload}
+                    />
+                    <label htmlFor="file-upload">
+                      <Button
+                        component="span"
+                        disabled={isLoading}
+                        sx={{ minWidth: 'auto', p: '6px' }}
+                      >
+                        <AttachFileIcon />
+                      </Button>
+                    </label>
+                  </Box>
+                ),
+                endAdornment: (
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <Button
+                      type="submit"
+                      disabled={isLoading}
+                      sx={{ minWidth: 'auto', p: '6px' }}
+                    >
+                      <SendIcon />
+                    </Button>
+                  </Box>
+                ),
+              }}
+              
             />
-            <Button type="submit" variant="contained" endIcon={<SendIcon />} disabled={isLoading}>
-              Send
-            </Button>
           </Box>
+          {uploadedDocument && (
+            <Typography variant="caption" sx={{ mt: 1 }}>
+              Uploaded: {uploadedDocument.name}
+            </Typography>
+          )}
         </Box>
         <Accordion sx={{ mt: 2 }}>
             <AccordionSummary
