@@ -83,6 +83,41 @@
   margin-bottom: 8px;
 }
 
+.app-bar {
+  background-color: #001549;
+  box-shadow: 0 3px 5px 2px rgba(255, 105, 135, .3);
+}
+
+.toolbar {
+  background-color: #001549;
+  display: flex;
+  justify-content: flex-start;
+}
+
+.logo-container {
+  display: flex;
+  align-items: center;
+}
+
+.search-icon {
+  margin-right: 10px;
+  font-size: 1.5rem;
+}
+
+.logo-typography {
+  font-weight: 700;
+  letter-spacing: .1rem;
+  color: inherit;
+  text-decoration: none;
+}
+
+.customer-name {
+  font-weight: 700;
+  letter-spacing: .1rem;
+  font-style: italic;
+}
+
+
 /* Add this new style for the emoji icons */
 .MuiListItemIcon-root {
   min-width: 40px;

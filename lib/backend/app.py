@@ -1,5 +1,7 @@
 from flask import Flask, request, Response, jsonify
 from flask_cors import CORS
+from werkzeug.utils import secure_filename
+import tempfile
 import os
 import boto3
 import json
@@ -262,34 +264,62 @@ def visualize_products(question):
 
 @app.route('/api/chat', methods=['POST'])
 def chat():
-    data = request.json
+    question = request.form.get('question')
+    chat_history = json.loads(request.form.get('chat_history', '[]'))
+    prompt_modifier = request.form.get('prompt_modifier', "Informative, empathetic, and friendly")
     
-    chat_history = data.get('chat_history', [])
-    prompt_modifier = data.get('prompt_modifier', "Informative, empathetic, and friendly")
+    uploaded_file = request.files.get('document')
+    document_format = request.form.get('document_format')
 
-    print(f"Chat history: {chat_history}")
+    # Read file content immediately if a file is uploaded
+    doc_content = None
+    filename = None
+    if uploaded_file and document_format:
+        filename = secure_filename(uploaded_file.filename).split(".")[0]
+        doc_content = uploaded_file.read()
+
     def generate():
-        question = data['question']
-        # Use tool calling to determine which tool to use
-        response = BEDROCK_CLIENT.converse(
-            modelId=good_model_id,
-            system=[{"text": system_prompt}],
-            messages=[
-                {"role": "user", "content": [{"text": f"Question: {question}"}]}
-            ],
-            inferenceConfig={"maxTokens": 512, "temperature": 0, "topP": 1},
-            toolConfig=TOOL_CONFIG
-        )
-        print(f"Response: {response}")
-        if response["stopReason"] == "tool_use":
-            tool_call = next(item["toolUse"] for item in response["output"]["message"]["content"] if "toolUse" in item)
-            if tool_call["name"] == "retrieve_information":
-                question_to_answer = tool_call["input"]["question"]
+        answer = ""
+        try:
+            if doc_content is not None:
+                # Handle uploaded document
+                doc_message = {
+                    "role": "user",
+                    "content": [
+                        {
+                            "document": {
+                                "name": filename,
+                                "format": document_format,
+                                "source": {
+                                    "bytes": doc_content
+                                }
+                            }
+                        },
+                        {"text": question}
+                    ]
+                }
+
+                response = BEDROCK_CLIENT.converse_stream(
+                    modelId=good_model_id,
+                    messages=[doc_message],
+                    inferenceConfig={
+                        "maxTokens": 2000,
+                        "temperature": 0
+                    },
+                )
                 
-                # Rewrite question if there's chat history
+                for chunk in response["stream"]:
+                    if "contentBlockDelta" in chunk:
+                        text = chunk["contentBlockDelta"]["delta"]["text"]
+                        answer += text
+                        yield f"data: {json.dumps({'type': 'content', 'content': text})}\n\n"
+                
+                
+            else:
+                # Existing logic for retrieving documents and generating response
                 if len(chat_history) >= 2:
                     chat_history_str = "\n".join([f"Human: {chat_history[i]}\nAI: {chat_history[i+1]}" for i in range(0, len(chat_history) - 1, 2)])
-                    rewrite_prompt = condense_question_template.format(chat_history=chat_history_str, question=question_to_answer)
+                    rewrite_prompt = condense_question_template.format(chat_history=chat_history_str, question=question)
                     try:
                         rewrite_response = BEDROCK_CLIENT.converse(
                             modelId=good_model_id,
@@ -300,17 +330,13 @@ def chat():
                         rewritten_question = rewrite_response["output"]["message"]["content"][0]["text"]
                     except Exception as e:
                         print(f"Error in question rewriting: {e}")
-                        rewritten_question = question_to_answer
+                        rewritten_question = question
                 else:
-                    print(f"No chat history, using original question: {question_to_answer}")
-                    rewritten_question = question_to_answer
-                print(f"Rewritten question: {rewritten_question}")
+                    rewritten_question = question
 
-                # Retrieve relevant documents
                 docs = retriever.get_relevant_documents(rewritten_question)
                 context = "\n".join([doc.page_content for doc in docs])
 
-                # Extract sources
                 sources = []
                 for doc in docs:
                     if doc.metadata['location'] != "":
@@ -318,10 +344,8 @@ def chat():
                         if url not in sources:
                             sources.append(url)
 
-                # Yield the sources immediately
                 yield f"data: {json.dumps({'type': 'metadata', 'sources': sources})}\n\n"
 
-                # Construct the prompt
                 prompt = template.format(
                     customer_name=customer_name,
                     prompt_modifier=prompt_modifier,
@@ -329,7 +353,6 @@ def chat():
                     question=rewritten_question
                 )
 
-                # Generate the response
                 response = BEDROCK_CLIENT.converse_stream(
                     modelId=good_model_id,
                     system=[{"text": system_prompt}],
@@ -340,113 +363,56 @@ def chat():
                     }
                 )
 
-                response_content = ""
+                
                 for chunk in response["stream"]:
                     if "contentBlockDelta" in chunk:
                         text = chunk["contentBlockDelta"]["delta"]["text"]
-                        response_content += text
+                        answer += text
                         yield f"data: {json.dumps({'type': 'content', 'content': text})}\n\n"
-            elif tool_call["name"] == "visualize_products":
-                question = tool_call["input"]["question"]
-                visualization_data = visualize_products(question)
-                yield f"data: {json.dumps({'type': 'visualization', 'content': visualization_data})}\n\n"
-        
-        else:
-            print("No tools called, using default behavior")
-            # Default behavior (existing logic)
-            question_to_answer = question
-            
-            # Rewrite question if there's chat history
-            if len(chat_history) >= 2:
-                chat_history_str = "\n".join([f"Human: {chat_history[i]}\nAI: {chat_history[i+1]}" for i in range(0, len(chat_history) - 1, 2)])
-                rewrite_prompt = condense_question_template.format(chat_history=chat_history_str, question=question_to_answer)
-                try:
-                    rewrite_response = BEDROCK_CLIENT.converse(
-                        modelId=good_model_id,
-                        system=[{"text": system_prompt}],
-                        messages=[{"role": "user", "content": [{"text": rewrite_prompt}]}],
-                        inferenceConfig={"maxTokens": 512, "temperature": 0, "topP": 1},
-                    )
-                    rewritten_question = rewrite_response["output"]["message"]["content"][0]["text"]
-                except Exception as e:
-                    print(f"Error in question rewriting: {e}")
-                    rewritten_question = question_to_answer
-            else:
-                print(f"No chat history, using original question: {question_to_answer}")
-                rewritten_question = question_to_answer
-            print(f"Rewritten question: {rewritten_question}")
 
-            # Retrieve relevant documents
-            docs = retriever.get_relevant_documents(rewritten_question)
-            context = "\n".join([doc.page_content for doc in docs])
+            yield f"data: {json.dumps({'type': 'stop'})}\n\n"
 
-            # Extract sources
-            sources = []
-            for doc in docs:
-                if doc.metadata['location'] != "":
-                    url = doc.metadata['location']['webLocation']['url']
-                    if url not in sources:
-                        sources.append(url)
+            # Generate new suggested questions
+            suggested_questions_prompt = f"""Based on the following conversation history and the last answer:
 
-            # Yield the sources immediately
-            yield f"data: {json.dumps({'type': 'metadata', 'sources': sources})}\n\n"
+            Conversation History:
+            {chat_history}
 
-            # Construct the prompt
-            prompt = template.format(
-                customer_name=customer_name,
-                prompt_modifier=prompt_modifier,
-                context=context,
-                question=rewritten_question
-            )
+            Last Question:
+            {question}
 
-            # Generate the response
-            response = BEDROCK_CLIENT.converse_stream(
-                modelId=good_model_id,
+            Last Answer:
+            {answer}
+
+            Generate 3-5 relevant follow-up questions that the user might want to ask next. These questions should be diverse and explore different aspects related to the conversation.
+
+            Format your response as a JSON array of strings, like this:
+            ["Question 1?", "Question 2?", "Question 3?"]
+
+            Provide only the JSON array, without any additional text or explanation.
+            """
+
+            print(f"Suggested questions prompt: {suggested_questions_prompt}")
+
+            suggested_questions_response = BEDROCK_CLIENT.converse(
+                modelId=fast_model_id,
                 system=[{"text": system_prompt}],
-                messages=[{"role": "user", "content": [{"text": prompt}]}],
-                inferenceConfig={
-                    "temperature": 0,
-                    "maxTokens": 1000,
-                }
+                messages=[{"role": "user", "content": [{"text": suggested_questions_prompt}]}],
+                inferenceConfig={"maxTokens": 500, "temperature": 0.7, "topP": 1},
             )
 
-            response_content = ""
-            for chunk in response["stream"]:
-                if "contentBlockDelta" in chunk:
-                    text = chunk["contentBlockDelta"]["delta"]["text"]
-                    response_content += text
-                    yield f"data: {json.dumps({'type': 'content', 'content': text})}\n\n"
-        
-        yield f"data: {json.dumps({'type': 'stop'})}\n\n"
+            suggested_questions_text = suggested_questions_response["output"]["message"]["content"][0]["text"]
+            suggested_questions_list = json.loads(suggested_questions_text)
 
-        # Generate new suggested questions
-        suggested_questions_prompt = f"""Based on the following conversation history and the last answer:
+            yield f"data: {json.dumps({'type': 'suggested_questions', 'content': suggested_questions_list})}\n\n"
 
-        Conversation History:
-        {chat_history}
-
-        Last Answer:
-        {response_content}
-
-        Generate 3-5 relevant follow-up questions that the user might want to ask next. These questions should be diverse and explore different aspects related to the conversation.
-
-        Format your response as a JSON array of strings, like this:
-        ["Question 1?", "Question 2?", "Question 3?"]
-
-        Provide only the JSON array, without any additional text or explanation.
-        """
-
-        suggested_questions_response = BEDROCK_CLIENT.converse(
-            modelId=fast_model_id,
-            system=[{"text": system_prompt}],
-            messages=[{"role": "user", "content": [{"text": suggested_questions_prompt}]}],
-            inferenceConfig={"maxTokens": 500, "temperature": 0.7, "topP": 1},
-        )
-
-        suggested_questions_text = suggested_questions_response["output"]["message"]["content"][0]["text"]
-        suggested_questions_list = json.loads(suggested_questions_text)
-
-        yield f"data: {json.dumps({'type': 'suggested_questions', 'content': suggested_questions_list})}\n\n"
+        except Exception as e:
+            error_message = str(e)
+            print(f"Error in chat generation: {error_message}")
+            import traceback
+            print("Error details:")
+            print(traceback.format_exc())
+            yield f"error: {json.dumps({'content': error_message})}\n\n"
 
     return Response(generate(), mimetype='text/event-stream')
 
