@@ -281,7 +281,7 @@ const App: React.FC = () => {
               color: 'text.secondary'
             }}
           >
-            Creates organized card views based on your prompts. Each catalog will analyze your Knowledge Base and use Bedrock togenerate relevant cards with extracted information.
+            Creates organized card views based on your prompts. Each catalog will analyze your Knowledge Base and use Bedrock to generate relevant cards with extracted information.
           </Typography>
         </Collapse>
       </Box>
