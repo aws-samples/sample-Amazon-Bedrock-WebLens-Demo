@@ -1,3 +1,0 @@
-scrapyd
-beautifulsoup4
-boto3

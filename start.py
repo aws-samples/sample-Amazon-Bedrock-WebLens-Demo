@@ -75,10 +75,13 @@ def deploy(stack=None):
     command += " --require-approval never"
     print(f"    Deploying {'all stacks' if not stack else stack}...")
     run_command(command)
-    print("✅ Stack deployed successfully!")
-    print("ℹ️  If this is the first time you've deployed this stack, you will need to wait for the Knowledge Base to finish crawling the web. This can take a while.")
-    print("🔍 You can check the status of the Knowledge Base in the AWS console at:")
-    print("🔗 https://us-east-1.console.aws.amazon.com/bedrock/home?region=us-east-1#/knowledge-bases")
+    print("""✅ Stack deployed successfully! You can use the above DemoFrontendURL to access the demo.
+
+ℹ️  If this is the first time you've deployed this stack, you will need to wait for the Knowledge Base to finish crawling the web. This can take a while.")
+
+🔍 You can check the status of the Knowledge Base in the AWS console at:")
+
+🔗 https://us-east-1.console.aws.amazon.com/bedrock/home?region=us-east-1#/knowledge-bases""")
 
 def destroy(stack=None):
     context = load_context()

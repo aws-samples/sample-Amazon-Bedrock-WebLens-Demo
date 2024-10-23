@@ -2,7 +2,7 @@ import React, { useState, useEffect, KeyboardEvent } from 'react';
 import { BrowserRouter as Router, Route, Routes, Navigate, useNavigate } from 'react-router-dom';
 import Ideator from './components/Ideator';
 import ChatBot from './components/ChatBot';
-import SiteInfo from './components/SiteInfo';
+import SiteInfo from './components/Catalog';
 import IdeaDetails from './components/IdeaDetails';
 import { Box, Container, AppBar, Toolbar, Typography, Button, 
   IconButton, TextField, List, ListItem, ListItemText, Drawer, Divider, ListItemIcon } from '@mui/material';
@@ -365,7 +365,7 @@ const App: React.FC = () => {
           <Typography variant="h5" className="customer-name">
             for {config.customerName}
           </Typography>
-        </Toolbar>
+                  </Toolbar>
       </AppBar>
       <Drawer
         variant="permanent"
