@@ -2,10 +2,10 @@ import React, { useState, useEffect, KeyboardEvent } from 'react';
 import { BrowserRouter as Router, Route, Routes, Navigate, useNavigate } from 'react-router-dom';
 import Ideator from './components/Ideator';
 import ChatBot from './components/ChatBot';
-import SiteInfo from './components/SiteInfo';
+import SiteInfo from './components/Catalog';
 import IdeaDetails from './components/IdeaDetails';
 import { Box, Container, AppBar, Toolbar, Typography, Button, 
-  IconButton, TextField, List, ListItem, ListItemText, Drawer, Divider, ListItemIcon } from '@mui/material';
+  IconButton, TextField, List, ListItem, ListItemText, Drawer, Divider, ListItemIcon, Collapse } from '@mui/material';
 import { Link as RouterLink } from 'react-router-dom';
 import AddIcon from '@mui/icons-material/Add';
 import MenuIcon from '@mui/icons-material/Menu';
@@ -16,7 +16,7 @@ import CatalogIcon from '@mui/icons-material/Book';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { IconName } from '@fortawesome/fontawesome-svg-core';
 import './App.css';
-import { faGlasses, faMagnifyingGlass } from '@fortawesome/free-solid-svg-icons';
+import { faGlasses, faMagnifyingGlass, faChevronUp, faChevronDown, faCircleInfo } from '@fortawesome/free-solid-svg-icons';
 
 // Custom hook to fetch config
 const useConfig = () => {
@@ -73,6 +73,9 @@ const App: React.FC = () => {
   const [newIdeatorName, setNewIdeatorName] = useState('');
   const [drawerOpen, setDrawerOpen] = useState(true);
   const navigate = useNavigate();
+  const [showInfo, setShowInfo] = useState(false);
+  const [showCatalogInfo, setShowCatalogInfo] = useState(false);
+  const [showIdeatorInfo, setShowIdeatorInfo] = useState(false);
 
   useEffect(() => {
     if (config && config.backendUrl) {
@@ -254,9 +257,34 @@ const App: React.FC = () => {
         </ListItem>
       </List>
       <Divider />
-      <Typography variant="h6" className="sidebar-header">
-        Site Catalogs
-      </Typography>
+      <Box sx={{ backgroundColor: 'rgba(0, 0, 0, 0.04)', width: '100%' }}>
+        <Box sx={{ 
+          display: 'flex', 
+          alignItems: 'center',
+          padding: '12px 16px',
+          cursor: 'pointer'
+        }}
+        onClick={() => setShowCatalogInfo(!showCatalogInfo)}
+        >
+          <Typography variant="h6">Site Catalogs</Typography>
+          <FontAwesomeIcon 
+            icon={faCircleInfo}
+            style={{ marginLeft: 'auto', fontSize: 16, opacity: 0.6 }}
+          />
+        </Box>
+        <Collapse in={showCatalogInfo}>
+          <Typography 
+            variant="body2" 
+            sx={{ 
+              px: 2, 
+              pb: 2,
+              color: 'text.secondary'
+            }}
+          >
+            Creates organized card views based on your prompts. Each catalog will analyze your Knowledge Base and use Bedrock to generate relevant cards with extracted information.
+          </Typography>
+        </Collapse>
+      </Box>
       <List>
         <ListItem button component={RouterLink} to="/products" className="sidebar-item">
           <ListItemIcon>
@@ -304,9 +332,34 @@ const App: React.FC = () => {
         </ListItem>
       </List>
       <Divider />
-      <Typography variant="h6" className="sidebar-header">
-        Product Ideator
-      </Typography>
+      <Box sx={{ backgroundColor: 'rgba(0, 0, 0, 0.04)', width: '100%' }}>
+        <Box sx={{ 
+          display: 'flex', 
+          alignItems: 'center',
+          padding: '12px 16px',
+          cursor: 'pointer'
+        }}
+        onClick={() => setShowIdeatorInfo(!showIdeatorInfo)}
+        >
+          <Typography variant="h6">Product Ideator</Typography>
+          <FontAwesomeIcon 
+            icon={faCircleInfo}
+            style={{ marginLeft: 'auto', fontSize: 16, opacity: 0.6 }}
+          />
+        </Box>
+        <Collapse in={showIdeatorInfo}>
+          <Typography 
+            variant="body2" 
+            sx={{ 
+              px: 2, 
+              pb: 2,
+              color: 'text.secondary'
+            }}
+          >
+            Generate innovative product ideas based on your Knowledge Base. Uses Bedrock to analyze your content and suggest new product opportunities aligned with your business.
+          </Typography>
+        </Collapse>
+      </Box>
       <List>
         {productIdeators.map((ideator, index) => (
           <ListItem key={ideator.id} button component={RouterLink} to={ideator.route} className="sidebar-item">
@@ -365,7 +418,7 @@ const App: React.FC = () => {
           <Typography variant="h5" className="customer-name">
             for {config.customerName}
           </Typography>
-        </Toolbar>
+                  </Toolbar>
       </AppBar>
       <Drawer
         variant="permanent"

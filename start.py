@@ -15,7 +15,7 @@ def check_customers_dir():
         os.makedirs('customers')
 
 def npm_install():
-    subprocess.run(["npm", "install"], check=True)
+    run_command("npm install")
 
 def check_cdk_cli():
     if shutil.which('cdk') is None:
@@ -35,24 +35,13 @@ def check_docker():
         print("After installation, restart your terminal and run this script again.")
         sys.exit(1)
     print("    ✅ Docker is found in your system PATH.")
-def check_ecr_login():
-    try:
-        result = subprocess.run(["docker", "image", "ls", "public.ecr.aws/z6v3b4o4/aws-cli"], capture_output=True, text=True)
-        if "REPOSITORY" in result.stdout:
-            print("    ✅ Already logged in to ECR Public.")
-        else:
-            print("    🔑 Logging in to ECR Public...")
-            login_command = "aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws/z6v3b4o4"
-            subprocess.run(login_command, shell=True, check=True)
-            print("    ✅ Successfully logged in to ECR Public.")
-    except subprocess.CalledProcessError as e:
-        print(f"    ❌ Error logging in to ECR Public: {e}")
-        sys.exit(1)
 
 def run_command(command):
     try:
-        print(f"🚀 Running command: {command}")
-        subprocess.run(command, check=True, shell=True)
+        # Convert string command to list if necessary
+        command_list = command if isinstance(command, list) else command.split()
+        print(f"🚀 Running command: {' '.join(command_list)}")
+        subprocess.run(command_list, check=True)
     except subprocess.CalledProcessError as e:
         print(f"❌ Error executing command: {e}")
         sys.exit(1)
@@ -75,10 +64,13 @@ def deploy(stack=None):
     command += " --require-approval never"
     print(f"    Deploying {'all stacks' if not stack else stack}...")
     run_command(command)
-    print("✅ Stack deployed successfully!")
-    print("ℹ️  If this is the first time you've deployed this stack, you will need to wait for the Knowledge Base to finish crawling the web. This can take a while.")
-    print("🔍 You can check the status of the Knowledge Base in the AWS console at:")
-    print("🔗 https://us-east-1.console.aws.amazon.com/bedrock/home?region=us-east-1#/knowledge-bases")
+    print("""✅ Stack deployed successfully! You can use the above DemoFrontendURL to access the demo.
+
+ℹ️  If this is the first time you've deployed this stack, you will need to wait for the Knowledge Base to finish crawling the web. This can take a while.")
+
+🔍 You can check the status of the Knowledge Base in the AWS console at:")
+
+🔗 https://us-east-1.console.aws.amazon.com/bedrock/home?region=us-east-1#/knowledge-bases""")
 
 def destroy(stack=None):
     context = load_context()
@@ -272,7 +264,19 @@ def run_process(command, working_dir, prefix):
     current_dir = os.getcwd()
     os.chdir(working_dir)
     try:
-        process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, universal_newlines=True)
+        # Convert string command to list if necessary
+        command_list = command if isinstance(command, list) else command.split()
+        print(f"🚀 Running process: {' '.join(command_list)}")
+        
+        process = subprocess.Popen(
+            command_list,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            universal_newlines=True
+        )
+        
         for line in iter(process.stdout.readline, ''):
             sys.stdout.write(f"{prefix}: {line}")
             sys.stdout.flush()
@@ -332,7 +336,6 @@ def main():
     check_customers_dir()
     check_cdk_cli()
     check_docker()
-    check_ecr_login()
     check_bedrock_models()
 
     parser = argparse.ArgumentParser(description="CDK Deployment Script")

@@ -10,7 +10,7 @@ import { useNavigate } from 'react-router-dom';
 
 library.add(fas);
 
-interface SiteInfoProps {
+interface CatalogProps {
   backendUrl: string;
   siteName: string;
   initialPrompt: string;
@@ -33,7 +33,7 @@ const Spinner = () => (
   </Box>
 );
 
-const SiteInfo: React.FC<SiteInfoProps> = ({ siteName, initialPrompt, onPromptSave, backendUrl, onTabDelete, initialGenerateImages }) => {
+const Catalog: React.FC<CatalogProps> = ({ siteName, initialPrompt, onPromptSave, backendUrl, onTabDelete, initialGenerateImages }) => {
   const [prompt, setPrompt] = useState(initialPrompt);
   const [savedPrompt, setSavedPrompt] = useState(initialPrompt);
   const [showPromptInput, setShowPromptInput] = useState(!initialPrompt);
@@ -312,6 +312,7 @@ const SiteInfo: React.FC<SiteInfoProps> = ({ siteName, initialPrompt, onPromptSa
           {cards.map((card, index) => (
               <Grid item xs={12} sm={6} md={4} key={index}>
                 <Card 
+                  onClick={() => card.link && window.open(card.link, '_blank', 'noopener,noreferrer')}
                   sx={{ 
                     backgroundColor: (() => {
                       const hash = card.title.split('').reduce((acc, char) => {
@@ -325,7 +326,7 @@ const SiteInfo: React.FC<SiteInfoProps> = ({ siteName, initialPrompt, onPromptSa
                     height: '100%',
                     display: 'flex',
                     flexDirection: 'column',
-                    cursor: 'pointer',
+                    cursor: card.link ? 'pointer' : 'default',  // Only show pointer cursor if there's a link
                     transition: 'all 0.3s ease-in-out',
                     '&:hover': {
                       boxShadow: 6,
@@ -359,7 +360,7 @@ const SiteInfo: React.FC<SiteInfoProps> = ({ siteName, initialPrompt, onPromptSa
                     </Typography>
                   </CardContent>
                   <CardActions sx={{ justifyContent: 'flex-start', position: 'relative' }}>
-                    <Button size="small" component="a" href={card.link} target="_blank" rel="noopener noreferrer">Learn More</Button>
+                    {/* Remove or hide the Learn More button since the whole card is now clickable */}
                   </CardActions>
                   <CardActions sx={{ justifyContent: 'flex-end', position: 'relative' }}>
                     <IconButton
@@ -458,4 +459,4 @@ const SiteInfo: React.FC<SiteInfoProps> = ({ siteName, initialPrompt, onPromptSa
   );
 };
 
-export default SiteInfo;
+export default Catalog;

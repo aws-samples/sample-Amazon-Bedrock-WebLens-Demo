@@ -70,7 +70,6 @@ export class AppStack extends cdk.Stack {
 
     // Create an Origin Access Identity for CloudFront
     const originAccessIdentity = new cloudfront.OriginAccessIdentity(this, 'OAI');
-    
 
     // Grant read permissions to the OAI
     websiteBucket.grantRead(originAccessIdentity);
@@ -128,14 +127,11 @@ export class AppStack extends cdk.Stack {
       distributionPaths: ['/*'],
     });
 
-    new cdk.CfnOutput(this, 'DistributionDomainName', {
-      value: distribution.distributionDomainName,
-      description: 'Frontend URL',
-    });
+    const tableName = props.customerName.replace(/\s+/g, '');
 
     // Create DynamoDB table for kb-products
     const productTable = new dynamodb.Table(this, 'KbProductsTable', {
-      tableName: `${props.customerName}-kb-products`,
+      tableName: `${tableName}-kb-products`,
       partitionKey: { name: 'name', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       removalPolicy: cdk.RemovalPolicy.DESTROY, // Use with caution in production
@@ -143,7 +139,7 @@ export class AppStack extends cdk.Stack {
 
     // Create DynamoDB table for kb-info (site info)
     const siteInfoTable = new dynamodb.Table(this, 'KbInfoTable', {
-      tableName: `${props.customerName}-kb-info`,
+      tableName: `${tableName}-kb-info`,
       partitionKey: { name: 'item_type', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'title', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
@@ -166,7 +162,7 @@ export class AppStack extends cdk.Stack {
 
     // Create DynamoDB table for kb-catalogs
     const catalogsTable = new dynamodb.Table(this, 'KbCatalogsTable', {
-      tableName: `${props.customerName}-kb-catalogs`,
+      tableName: `${tableName}-kb-catalogs`,
       partitionKey: { name: 'id', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       removalPolicy: cdk.RemovalPolicy.DESTROY, // Use with caution in production
@@ -183,7 +179,7 @@ export class AppStack extends cdk.Stack {
 
     // Create DynamoDB table for kb-ideators
     const ideatorsTable = new dynamodb.Table(this, 'KbIdeatorsTable', {
-      tableName: `${props.customerName}-kb-ideators`,
+      tableName: `${tableName}-kb-ideators`,
       partitionKey: { name: 'id', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       removalPolicy: cdk.RemovalPolicy.DESTROY, // Use with caution in production
@@ -200,7 +196,7 @@ export class AppStack extends cdk.Stack {
 
     // Create DynamoDB table for kb-product-ideas
     const productIdeasTable = new dynamodb.Table(this, 'KbProductIdeasTable', {
-      tableName: `${props.customerName}-kb-product-ideas`,
+      tableName: `${tableName}-kb-product-ideas`,
       partitionKey: { name: 'id', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       removalPolicy: cdk.RemovalPolicy.DESTROY, // Use with caution in production
@@ -217,7 +213,7 @@ export class AppStack extends cdk.Stack {
 
     // Create DynamoDB table for kb-idea-items
     const ideaItemsTable = new dynamodb.Table(this, 'KbIdeaItemsTable', {
-      tableName: `${props.customerName}-kb-idea-items`,
+      tableName: `${tableName}-kb-idea-items`,
       partitionKey: { name: 'item_type', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'title', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
@@ -231,13 +227,14 @@ export class AppStack extends cdk.Stack {
     backendService.taskDefinition.defaultContainer?.addEnvironment(
       'IDEA_ITEMS_TABLE_NAME',
       ideaItemsTable.tableName
-    );
+    ); 
 
-    
-    
-    
-    
+    new cdk.CfnOutput(this, 'DemoFrontendURL', {
+      value: `https://${distribution.distributionDomainName}`,
+      description: 'Frontend URL',
+    });
+
   }
-
   
 }
+

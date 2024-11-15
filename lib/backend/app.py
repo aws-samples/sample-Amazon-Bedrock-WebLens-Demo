@@ -340,9 +340,10 @@ def chat():
                 sources = []
                 for doc in docs:
                     if doc.metadata['location'] != "":
-                        url = doc.metadata['location']['webLocation']['url']
-                        if url not in sources:
-                            sources.append(url)
+                        if 'webLocation' in doc.metadata['location']:
+                            url = doc.metadata['location']['webLocation']['url']
+                            if url not in sources:
+                                sources.append(url)
 
                 yield f"data: {json.dumps({'type': 'metadata', 'sources': sources})}\n\n"
 
