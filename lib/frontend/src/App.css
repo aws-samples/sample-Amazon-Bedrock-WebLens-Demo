@@ -1,0 +1,134 @@
+.App {
+  text-align: center;
+}
+
+.App-logo {
+  height: 40vmin;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .App-logo {
+    animation: App-logo-spin infinite 20s linear;
+  }
+}
+
+.App-header {
+  background-color: #282c34;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(10px + 2vmin);
+  color: white;
+}
+
+.App-link {
+  color: #61dafb;
+}
+
+/* ... keep existing styles ... */
+
+.sidebar {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-header {
+  padding: 16px;
+  background-color: #f5f5f5;
+  color: #333;
+  font-weight: bold;
+}
+
+.sidebar-item {
+  transition: background-color 0.3s;
+}
+
+.sidebar-item:hover {
+  background-color: #e0e0e0;
+}
+
+.chat-item {
+  background-color: #e3f2fd;
+  font-weight: bold;
+}
+
+.chat-item:hover {
+  background-color: #bbdefb;
+}
+
+.add-catalog-container {
+  margin-top: auto;
+  padding: 16px;
+}
+
+.add-catalog-button {
+  background-color: #1976d2;
+  color: white;
+  transition: background-color 0.3s;
+  margin-top: 8px;
+  margin-bottom: 8px;
+}
+
+.add-catalog-button:hover {
+  background-color: #1565c0;
+}
+
+.add-catalog-input {
+  background-color: white;
+  margin-top: 8px;
+  margin-bottom: 8px;
+}
+
+.app-bar {
+  background-color: #001549;
+  box-shadow: 0 3px 5px 2px rgba(255, 105, 135, .3);
+}
+
+.toolbar {
+  background-color: #001549;
+  display: flex;
+  justify-content: flex-start;
+}
+
+.logo-container {
+  display: flex;
+  align-items: center;
+}
+
+.search-icon {
+  margin-right: 10px;
+  font-size: 1.5rem;
+}
+
+.logo-typography {
+  font-weight: 700;
+  letter-spacing: .1rem;
+  color: inherit;
+  text-decoration: none;
+}
+
+.customer-name {
+  font-weight: 700;
+  letter-spacing: .1rem;
+  font-style: italic;
+}
+
+
+/* Add this new style for the emoji icons */
+.MuiListItemIcon-root {
+  min-width: 40px;
+  font-size: 1.5rem;
+}
+
+@keyframes App-logo-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
