@@ -1,6 +1,6 @@
 
 
-# ![WebLens Logo](./web_lens_logo.png) AWS Bedrock WebLens Demo
+# ![WebLens Logo](./images/web_lens_logo.png) AWS Bedrock WebLens Demo
 >🆕 See the demo for yourself. Live demo link: https://d1ly1sce1no66z.cloudfront.net/
 
 The AWS Bedrock WebLens demo is designed to introduce customers to the capabilities of Amazon Bedrock suite of services, including Bedrock Knowledge Bases and frontier models like Anthropic's _Claude 3_ and _Amazon Titan Image Generator v2_.
@@ -19,7 +19,7 @@ Each part serves a distinct purpose, demonstrating practical applications of Gen
 <details open>
    <summary>Screenshot</summary>
 
-   ![alt text](chat_demo.gif)
+   ![alt text](images/chat_demo.gif)
 </details>
 
 ## Site Catalogs
@@ -30,8 +30,8 @@ Each part serves a distinct purpose, demonstrating practical applications of Gen
 <details open>
    <summary>Screenshot</summary>
    
-   ![alt text](products.png)
-   ![alt text](values.png)
+   ![alt text](images/products.png)
+   ![alt text](images/values.png)
 </details>
 
 ## Product Ideator
@@ -42,8 +42,8 @@ Each part serves a distinct purpose, demonstrating practical applications of Gen
 <details open>
 <summary>Screenshot</summary>
 
-![alt text](ideator.png)
-![alt text](idea_demo.gif)
+![alt text](images/ideator.png)
+![alt text](images/product-detail.png)
 </details>
 
 __Note: You must have access to a Bedrock enabled account to use this demo. You can also use the OpenAI API instead of Bedrock, but it's not advisable to demo in this way to customers.__

@@ -18,3 +18,4 @@ cdk.context.json
 /lib/frontend/build
 customers/
 lib/frontend/public/config.json
+.DS_Store

@@ -1,4 +1,4 @@
 {
-    "backendUrl": "http://localhost:5000",
-    "customerName": "AnyCompany"
+    "backendUrl": "http://localhost:5000/api",
+    "customerName": "Amazon"
 }

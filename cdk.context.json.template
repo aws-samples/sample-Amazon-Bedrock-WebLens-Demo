@@ -1,9 +1,0 @@
-{
-    "scrapeUrls": [
-        "https://www.example.com/"
-    ],
-    "customerName": "ACME Corp",
-    "customerFavicon": "optional favicon link",
-    "customerLogo": "optional logo link for chat avatar",
-    "customerIndustry": "CPG"
-}
