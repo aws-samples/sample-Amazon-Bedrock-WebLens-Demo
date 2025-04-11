@@ -1,7 +1,7 @@
 
 
 # ![WebLens Logo](./images/web_lens_logo.png) AWS Bedrock WebLens Demo
->🆕 See the demo for yourself. Live demo link: https://d1ly1sce1no66z.cloudfront.net/
+
 
 The AWS Bedrock WebLens demo is designed to introduce customers to the capabilities of Amazon Bedrock suite of services, including Bedrock Knowledge Bases and frontier models like Anthropic's _Claude 3_ and _Amazon Titan Image Generator v2_.
 
